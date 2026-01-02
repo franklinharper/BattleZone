@@ -4,11 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Dice Battle is a territory control game similar to Risk or Dice Wars where players compete to control all territories on a board by rolling dice to attack adjacent territories. The project supports AI tournaments with configurable game counts.
+BattleZone is a territory control game similar to Risk or Dice Wars where players compete to control all territories on a board by rolling dice to attack adjacent territories.
+
+The `dicewarsjs` folder contains legacy javascript code from Dice Wars. It is for reference only, no code in this folder should be modified.
+
+The `BattleZone` folder contains the code for a kotlin multiplatform game that is under development.
+
+Write idiomatic Kotlin code, and prefer a functional style where it makes sense.
 
 ## Architecture
 
-This is a **Kotlin Multiplatform (KMP)** project located in `/BattleZone/` with three main modules:
+The **Kotlin Multiplatform (KMP)** project is located in `/BattleZone/` and has three main modules:
 
 ### Module Structure
 
@@ -101,7 +107,7 @@ All commands must be run from the `BattleZone` directory.
 - Package namespace: `com.franklinharper.battlezone`
 - Resources are generated in `battlezone.composeapp.generated.resources`
 - The project uses typesafe project accessors (enabled in settings.gradle.kts)
-- Java compatibility: Java 11
+- Java compatibility: Java 21
 
 ## Development Notes
 
