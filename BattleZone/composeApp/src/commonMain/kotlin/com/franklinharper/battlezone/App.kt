@@ -70,12 +70,12 @@ fun App() {
                         Text(
                             "Player 0 (Purple): $player0Territories",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFB37FFE)
+                            color = GameColors.Player0
                         )
                         Text(
                             "Player 1 (Green): $player1Territories",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFB3FF01)
+                            color = GameColors.Player1
                         )
                     }
                 }
@@ -94,11 +94,6 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
         val cellWidth = 27f
         val cellHeight = 18f
 
-        // Player colors
-        val player0Color = Color(0xFFB37FFE) // Purple
-        val player1Color = Color(0xFFB3FF01) // Light green
-        val borderColor = Color(0xFF222244) // Dark border
-
         // First pass: Fill all cells with territory colors
         for (i in map.cells.indices) {
             val territoryId = map.cells[i]
@@ -107,8 +102,8 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
                 val cellPos = HexGrid.getCellPosition(i, cellWidth, cellHeight)
 
                 val fillColor = when (territory.owner) {
-                    0 -> player0Color
-                    1 -> player1Color
+                    0 -> GameColors.Player0
+                    1 -> GameColors.Player1
                     else -> Color.Gray
                 }
 
@@ -137,7 +132,7 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
                 // Draw border if neighbor is different territory or edge
                 if (neighborTerritoryId != territoryId) {
                     val cellPos = HexGrid.getCellPosition(i, cellWidth, cellHeight)
-                    drawHexEdge(cellPos.first, cellPos.second, cellWidth, cellHeight, dir, borderColor)
+                    drawHexEdge(cellPos.first, cellPos.second, cellWidth, cellHeight, dir, GameColors.TerritoryBorder)
                 }
             }
         }
@@ -154,7 +149,7 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
             val textLayoutResult = textMeasurer.measure(
                 text = displayText,
                 style = TextStyle(
-                    color = Color.White,
+                    color = GameColors.TerritoryText,
                     fontSize = 12.sp
                 )
             )
