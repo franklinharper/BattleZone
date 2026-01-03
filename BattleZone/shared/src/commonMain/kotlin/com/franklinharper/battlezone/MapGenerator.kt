@@ -106,6 +106,9 @@ object MapGenerator {
 
     /**
      * Grow a single territory from a seed cell using percolation
+     * Matches JavaScript implementation with two phases:
+     * Phase 1: Grow to target size using percolation
+     * Phase 2: Add all remaining adjacent cells and mark their neighbors
      */
     private fun growTerritory(
         cells: IntArray,
@@ -115,19 +118,23 @@ object MapGenerator {
         adjacentCells: BooleanArray,
         random: GameRandom
     ) {
+        // Track cells adjacent to this territory during growth
+        val nextCells = BooleanArray(HexGrid.TOTAL_CELLS) { false }
+
         var currentCell = seedCell
         var size = 0
 
+        // Phase 1: Grow to target size
         while (size < TARGET_TERRITORY_SIZE) {
             // Assign current cell to territory
             cells[currentCell] = territoryId
             size++
 
-            // Mark all neighbors as adjacent
+            // Mark all neighbors as adjacent to this territory
             val neighbors = HexGrid.getAllNeighbors(currentCell)
             for (neighbor in neighbors) {
                 if (neighbor != -1) {
-                    adjacentCells[neighbor] = true
+                    nextCells[neighbor] = true
                 }
             }
 
@@ -144,6 +151,23 @@ object MapGenerator {
 
             if (nextCell == -1) break // Can't grow anymore
             currentCell = nextCell
+        }
+
+        // Phase 2: Add all remaining adjacent cells (JavaScript lines 414-426)
+        for (i in cells.indices) {
+            if (nextCells[i] && cells[i] == 0) {
+                // Add this cell to the territory
+                cells[i] = territoryId
+                size++
+
+                // Mark all neighbors of this cell as candidates for future territories
+                val neighbors = HexGrid.getAllNeighbors(i)
+                for (neighbor in neighbors) {
+                    if (neighbor != -1) {
+                        adjacentCells[neighbor] = true
+                    }
+                }
+            }
         }
     }
 
@@ -180,14 +204,29 @@ object MapGenerator {
 
     /**
      * Fill isolated single-cell water spaces
+     * Only fills cells that are completely surrounded by territories (no unassigned neighbors)
+     * Matches JavaScript behavior: if( f==0 ) this.cel[i] = a;
      */
     private fun fillWaterHoles(cells: IntArray) {
         for (i in cells.indices) {
             if (cells[i] == 0) {
-                // Check if surrounded by territories
-                val neighborTerritory = findNeighboringTerritory(cells, i)
-                if (neighborTerritory != null) {
-                    cells[i] = neighborTerritory
+                // Check if completely surrounded by territories (no unassigned neighbors)
+                var hasUnassignedNeighbor = false
+                var territoryToAssign = 0
+
+                val neighbors = HexGrid.getAllNeighbors(i)
+                for (neighbor in neighbors) {
+                    if (neighbor == -1) continue
+                    if (cells[neighbor] == 0) {
+                        hasUnassignedNeighbor = true
+                    } else {
+                        territoryToAssign = cells[neighbor]
+                    }
+                }
+
+                // Only fill if completely surrounded by territories
+                if (!hasUnassignedNeighbor && territoryToAssign > 0) {
+                    cells[i] = territoryToAssign
                 }
             }
         }
