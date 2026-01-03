@@ -25,5 +25,5 @@ object GameColors {
     /**
      * Text color for army counts and territory info
      */
-    val TerritoryText = Color.White
+    val TerritoryText = Color.Black
 }

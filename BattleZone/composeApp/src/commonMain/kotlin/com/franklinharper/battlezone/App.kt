@@ -416,29 +416,42 @@ fun MapRenderer(
             }
         }
 
-        // Highlight selected territories
+        // Highlight selected territories - only draw outer edges
         for (territoryId in highlightedTerritories) {
             val territory = map.territories.getOrNull(territoryId) ?: continue
             if (territory.size == 0) continue
 
-            // Draw highlight border around entire territory
+            val highlightColor = if (territoryId == attackFromTerritory) {
+                Color.Red // Attacking territory
+            } else {
+                Color.Yellow // Defending territory
+            }
+
+            // Draw highlight border around territory outline only
             // Note: map.cells uses 1-based IDs, so we compare with territoryId + 1
             for (cellIdx in map.cells.indices) {
                 if (map.cells[cellIdx] == territoryId + 1) {
                     val cellPos = HexGrid.getCellPosition(cellIdx, cellWidth, cellHeight)
-                    val highlightColor = if (territoryId == attackFromTerritory) {
-                        Color.Red // Attacking territory
-                    } else {
-                        Color.Yellow // Defending territory
-                    }
+                    val neighbors = map.cellNeighbors[cellIdx].directions
 
-                    // Draw thicker border for highlighted territories
-                    val hexPath = buildHexagonPath(cellPos.first, cellPos.second, cellWidth, cellHeight)
-                    drawPath(
-                        path = hexPath,
-                        color = highlightColor,
-                        style = Stroke(width = max(4f, 6f * (cellWidth / ORIGINAL_CELL_WIDTH)))
-                    )
+                    // Only draw edges that border a different territory (outer edges)
+                    for (dir in neighbors.indices) {
+                        val neighborCell = neighbors[dir]
+                        val neighborTerritoryId = if (neighborCell != -1) map.cells[neighborCell] else -1
+
+                        // Draw edge if it's a boundary (different territory or edge of map)
+                        if (neighborTerritoryId != territoryId + 1) {
+                            drawHexEdge(
+                                cellPos.first,
+                                cellPos.second,
+                                cellWidth,
+                                cellHeight,
+                                dir,
+                                highlightColor,
+                                max(4f, 6f * (cellWidth / ORIGINAL_CELL_WIDTH))
+                            )
+                        }
+                    }
                 }
             }
         }
