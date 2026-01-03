@@ -51,11 +51,34 @@ fun App() {
             }
 
             gameMap?.let { map ->
-                Text(
-                    "Territories: ${map.territories.size}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(8.dp)
-                )
+                // Calculate player statistics
+                val player0Territories = map.territories.count { it.owner == 0 }
+                val player1Territories = map.territories.count { it.owner == 1 }
+
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Total Territories: ${map.territories.size}",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            "Player 0 (Purple): $player0Territories",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFB37FFE)
+                        )
+                        Text(
+                            "Player 1 (Green): $player1Territories",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFB3FF01)
+                        )
+                    }
+                }
 
                 MapRenderer(map = map, modifier = Modifier.fillMaxSize())
             }
@@ -119,21 +142,30 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
             }
         }
 
-        // Third pass: Draw army counts
+        // Third pass: Draw army counts and cell sizes
         for (territory in map.territories) {
             if (territory.size == 0) continue
 
             val centerPos = HexGrid.getCellPosition(territory.centerPos, cellWidth, cellHeight)
+
+            // Display format: "armies (cells)"
+            val displayText = "${territory.armyCount} (${territory.size})"
+
             val textLayoutResult = textMeasurer.measure(
-                text = territory.armyCount.toString(),
+                text = displayText,
                 style = TextStyle(
                     color = Color.White,
-                    fontSize = 14.sp
+                    fontSize = 12.sp
                 )
             )
+
+            // Center the text better
+            val textX = centerPos.first + cellWidth / 2 - textLayoutResult.size.width / 2
+            val textY = centerPos.second + cellHeight / 2 - textLayoutResult.size.height / 2
+
             drawText(
                 textLayoutResult = textLayoutResult,
-                topLeft = Offset(centerPos.first + cellWidth / 3, centerPos.second + cellHeight / 3)
+                topLeft = Offset(textX, textY)
             )
         }
     }
