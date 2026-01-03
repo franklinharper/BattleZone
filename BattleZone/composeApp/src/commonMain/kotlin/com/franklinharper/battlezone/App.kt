@@ -89,6 +89,17 @@ fun calculateFontSize(cellWidth: Float): Float {
 fun App() {
     MaterialTheme {
         var gameMap by remember { mutableStateOf<GameMap?>(null) }
+        var player0State by remember { mutableStateOf(PlayerState(0, 0, 0, 0)) }
+        var player1State by remember { mutableStateOf(PlayerState(0, 0, 0, 0)) }
+        var reinforcementMessage by remember { mutableStateOf<String?>(null) }
+
+        // Update player states when map changes
+        LaunchedEffect(gameMap) {
+            gameMap?.let { map ->
+                GameLogic.updatePlayerState(map, player0State, 0)
+                GameLogic.updatePlayerState(map, player1State, 1)
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -98,25 +109,67 @@ fun App() {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "BattleZone - Map Generation",
+                "BattleZone - Phase 2: Reinforcement",
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(16.dp)
             )
 
-            Button(
-                onClick = {
-                    gameMap = MapGenerator.generate()
-                },
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(8.dp)
             ) {
-                Text("Generate New Map")
+                Button(
+                    onClick = {
+                        val newMap = MapGenerator.generate()
+                        gameMap = newMap
+                        GameLogic.updatePlayerState(newMap, player0State, 0)
+                        GameLogic.updatePlayerState(newMap, player1State, 1)
+                        reinforcementMessage = null
+                    }
+                ) {
+                    Text("Generate New Map")
+                }
+
+                Button(
+                    onClick = {
+                        gameMap?.let { map ->
+                            // Calculate reinforcements
+                            val p0Reinforcements = GameLogic.calculateReinforcements(map, 0)
+                            val p1Reinforcements = GameLogic.calculateReinforcements(map, 1)
+
+                            // Show reinforcement message
+                            reinforcementMessage = "Reinforcing: Player 0 gets $p0Reinforcements armies, Player 1 gets $p1Reinforcements armies"
+
+                            // Distribute reinforcements
+                            player0State.reserveArmies = GameLogic.distributeReinforcements(
+                                map, 0, p0Reinforcements, player0State.reserveArmies
+                            )
+                            player1State.reserveArmies = GameLogic.distributeReinforcements(
+                                map, 1, p1Reinforcements, player1State.reserveArmies
+                            )
+
+                            // Update player states
+                            GameLogic.updatePlayerState(map, player0State, 0)
+                            GameLogic.updatePlayerState(map, player1State, 1)
+                        }
+                    },
+                    enabled = gameMap != null
+                ) {
+                    Text("Reinforce Armies")
+                }
+            }
+
+            // Display reinforcement message
+            reinforcementMessage?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(8.dp)
+                )
             }
 
             gameMap?.let { map ->
-                // Calculate player statistics
-                val player0Territories = map.territories.count { it.owner == 0 }
-                val player1Territories = map.territories.count { it.owner == 1 }
-
                 Column(
                     modifier = Modifier.padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -125,20 +178,67 @@ fun App() {
                         "Total Territories: ${map.territories.size}",
                         style = MaterialTheme.typography.bodyLarge
                     )
-                    Row(
-                        modifier = Modifier.padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+
+                    // Player 0 stats
+                    Column(
+                        modifier = Modifier.padding(top = 8.dp),
+                        horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            "Player 0 (Purple): $player0Territories",
-                            style = MaterialTheme.typography.bodyMedium,
+                            "Player 0 (Purple):",
+                            style = MaterialTheme.typography.bodyLarge,
                             color = GameColors.Player0
                         )
                         Text(
-                            "Player 1 (Green): $player1Territories",
-                            style = MaterialTheme.typography.bodyMedium,
+                            "  Territories: ${player0State.territoryCount}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "  Total Armies: ${player0State.totalArmies}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "  Largest Connected: ${player0State.largestConnectedSize}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (player0State.reserveArmies > 0) {
+                            Text(
+                                "  Reserve: ${player0State.reserveArmies}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    // Player 1 stats
+                    Column(
+                        modifier = Modifier.padding(top = 8.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            "Player 1 (Green):",
+                            style = MaterialTheme.typography.bodyLarge,
                             color = GameColors.Player1
                         )
+                        Text(
+                            "  Territories: ${player1State.territoryCount}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "  Total Armies: ${player1State.totalArmies}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "  Largest Connected: ${player1State.largestConnectedSize}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (player1State.reserveArmies > 0) {
+                            Text(
+                                "  Reserve: ${player1State.reserveArmies}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
 
