@@ -1437,8 +1437,10 @@ fun largestConnectedComponent() {
 
 ## Implementation Phases
 
-### Phase 1: Map Generation & Rendering
+### Phase 1: Map Generation & Rendering ✅ COMPLETE
 **Goal**: Generate and display a playable map
+
+**Status**: ✅ Completed 2026-01-03
 
 **Tasks**:
 1. Port hexagonal grid system from dicewarsjs
@@ -1470,8 +1472,10 @@ fun largestConnectedComponent() {
 
 ---
 
-### Phase 2: Army Reinforcement Algorithm
+### Phase 2: Army Reinforcement Algorithm ✅ COMPLETE
 **Goal**: Implement and visualize reinforcement mechanics
+
+**Status**: ✅ Completed 2026-01-03
 
 **Tasks**:
 1. Port largest connected component algorithm
@@ -1894,10 +1898,15 @@ actual class GameStorageImpl() : GameStorage {
 
 ---
 
-**Document Version**: 2.1
-**Last Updated**: 2026-01-02
-**Status**: Ready for Implementation
+**Document Version**: 2.2
+**Last Updated**: 2026-01-03
+**Status**: Phase 1 & 2 Complete, Phase 3+ In Progress
 **Scope**: 1v1 turn-based gameplay (Human vs Bot, or Bot vs Bot)
+
+**Recent Changes in v2.2**:
+- Marked Phase 1 (Map Generation & Rendering) as complete
+- Marked Phase 2 (Army Reinforcement Algorithm) as complete
+- Implementation includes: DFS-based connected component algorithm, reinforcement distribution with reserve pool, comprehensive unit tests (13 test cases), and enhanced UI with player statistics
 
 **Recent Changes in v2.1**:
 - Added State Management Architecture section (MVI pattern with StateFlow)
