@@ -1547,8 +1547,10 @@ fun largestConnectedComponent() {
 
 ---
 
-### Phase 4: Bot vs Bot Turn-Based Mode
+### Phase 4: Bot vs Bot Turn-Based Mode ✅ COMPLETE
 **Goal**: Two AIs playing a complete game
+
+**Status**: ✅ Completed 2026-01-03
 
 **UX Flow**:
 1. User selects "Bot vs Bot" mode
@@ -1900,10 +1902,15 @@ actual class GameStorageImpl() : GameStorage {
 
 ---
 
-**Document Version**: 2.3
+**Document Version**: 2.4
 **Last Updated**: 2026-01-03
-**Status**: Phase 1, 2 & 3 Complete, Phase 4+ In Progress
+**Status**: Phase 1, 2, 3 & 4 Complete, Phase 5+ In Progress
 **Scope**: 1v1 turn-based gameplay (Human vs Bot, or Bot vs Bot)
+
+**Recent Changes in v2.4**:
+- Marked Phase 4 (Bot vs Bot Turn-Based Mode) as complete
+- Implementation includes: GameController for turn management and combat resolution, full game loop with attack and reinforcement phases, victory detection, bot decision display with territory highlighting, combat results with dice visualization, and complete UI for bot vs bot gameplay
+- Players can now watch two AI bots play a complete game from start to finish
 
 **Recent Changes in v2.3**:
 - Marked Phase 3 (AI Bot Implementation) as complete

@@ -33,7 +33,6 @@ private const val MIN_CELL_HEIGHT = 7f
 private const val ORIGINAL_FONT_SIZE = 12f
 private const val MIN_FONT_SIZE = 8f
 private const val MAX_FONT_SIZE = 16f
-private const val ESTIMATED_FIXED_HEIGHT_DP = 204
 
 /**
  * Data class to hold calculated rendering parameters
@@ -53,7 +52,6 @@ fun calculateCellDimensions(
     availableHeightPx: Float
 ): MapRenderingParams {
     // Calculate scale factors for both dimensions
-    // Grid needs (GRID_WIDTH + 0.5) * cellWidth for odd row offsets
     val scaleFromWidth = (availableWidthPx * 2f) / ((HexGrid.GRID_WIDTH * 2 + 1) * ORIGINAL_CELL_WIDTH)
     val scaleFromHeight = availableHeightPx / (HexGrid.GRID_HEIGHT * ORIGINAL_CELL_HEIGHT)
 
@@ -76,7 +74,6 @@ fun calculateCellDimensions(
 
 /**
  * Calculate font size based on cell scaling factor
- * Ensures text remains readable at all scales
  */
 fun calculateFontSize(cellWidth: Float): Float {
     val scaleFactor = cellWidth / ORIGINAL_CELL_WIDTH
@@ -88,185 +85,260 @@ fun calculateFontSize(cellWidth: Float): Float {
 @Preview
 fun App() {
     MaterialTheme {
-        var gameMap by remember { mutableStateOf<GameMap?>(null) }
-        var player0State by remember { mutableStateOf(PlayerState(0, 0, 0, 0)) }
-        var player1State by remember { mutableStateOf(PlayerState(0, 0, 0, 0)) }
-        var reinforcementMessage by remember { mutableStateOf<String?>(null) }
+        var gameController by remember { mutableStateOf<GameController?>(null) }
+        var recompositionTrigger by remember { mutableStateOf(0) }
 
-        // Update player states when map changes
-        LaunchedEffect(gameMap) {
-            gameMap?.let { map ->
-                GameLogic.updatePlayerState(map, player0State, 0)
-                GameLogic.updatePlayerState(map, player1State, 1)
+        // Initialize with a new game
+        LaunchedEffect(Unit) {
+            val initialMap = MapGenerator.generate()
+            gameController = GameController(
+                initialMap = initialMap,
+                onStateChange = {
+                    recompositionTrigger++
+                }
+            )
+        }
+
+        // Trigger recomposition when state changes
+        key(recompositionTrigger) {
+            gameController?.let { controller ->
+                BotVsBotGame(controller)
+            }
+        }
+    }
+}
+
+@Composable
+fun BotVsBotGame(controller: GameController) {
+    // Access state - Compose will read these during composition
+    val gameState = controller.gameState
+    val uiState = controller.uiState
+
+    Column(
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.background)
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "BattleZone - Bot vs Bot",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(8.dp)
+        )
+
+        // Control buttons
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    val newMap = MapGenerator.generate()
+                    controller.newGame(newMap)
+                }
+            ) {
+                Text("New Game")
+            }
+
+            // Request bot decision or execute action
+            when {
+                controller.isGameOver() -> {
+                    // Game over, no action button needed
+                }
+                gameState.gamePhase == GamePhase.REINFORCEMENT -> {
+                    Button(
+                        onClick = {
+                            controller.executeReinforcementPhase()
+                        }
+                    ) {
+                        Text("Apply Reinforcements")
+                    }
+                }
+                uiState.currentBotDecision == null -> {
+                    Button(
+                        onClick = {
+                            controller.requestBotDecision()
+                        }
+                    ) {
+                        Text("Player ${controller.getCurrentPlayer()}: Make Decision")
+                    }
+                }
+                uiState.currentBotDecision is BotDecision.Attack -> {
+                    Button(
+                        onClick = {
+                            controller.executeBotDecision()
+                        }
+                    ) {
+                        Text("Execute Attack")
+                    }
+                }
+                uiState.currentBotDecision is BotDecision.Skip -> {
+                    Button(
+                        onClick = {
+                            controller.executeBotDecision()
+                        }
+                    ) {
+                        Text("Skip Turn")
+                    }
+                }
             }
         }
 
+        // Game status display
         Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.background)
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                "BattleZone - Phase 2: Reinforcement",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(16.dp)
-            )
+            // Current turn indicator
+            if (!controller.isGameOver()) {
+                val currentPlayerColor = if (controller.getCurrentPlayer() == 0)
+                    GameColors.Player0 else GameColors.Player1
+                Text(
+                    "Current Turn: Player ${controller.getCurrentPlayer()}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = currentPlayerColor,
+                    modifier = Modifier.padding(4.dp)
+                )
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        val newMap = MapGenerator.generate()
-                        gameMap = newMap
-                        GameLogic.updatePlayerState(newMap, player0State, 0)
-                        GameLogic.updatePlayerState(newMap, player1State, 1)
-                        reinforcementMessage = null
-                    }
-                ) {
-                    Text("Generate New Map")
-                }
-
-                Button(
-                    onClick = {
-                        gameMap?.let { map ->
-                            // Calculate reinforcements
-                            val p0Reinforcements = GameLogic.calculateReinforcements(map, 0)
-                            val p1Reinforcements = GameLogic.calculateReinforcements(map, 1)
-
-                            // Show reinforcement message
-                            reinforcementMessage = "Reinforcing: Player 0 gets $p0Reinforcements armies, Player 1 gets $p1Reinforcements armies"
-
-                            // Distribute reinforcements
-                            player0State.reserveArmies = GameLogic.distributeReinforcements(
-                                map, 0, p0Reinforcements, player0State.reserveArmies
-                            )
-                            player1State.reserveArmies = GameLogic.distributeReinforcements(
-                                map, 1, p1Reinforcements, player1State.reserveArmies
-                            )
-
-                            // Update player states
-                            GameLogic.updatePlayerState(map, player0State, 0)
-                            GameLogic.updatePlayerState(map, player1State, 1)
-                        }
-                    },
-                    enabled = gameMap != null
-                ) {
-                    Text("Reinforce Armies")
-                }
+                Text(
+                    "Phase: ${gameState.gamePhase}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(4.dp)
+                )
             }
 
-            // Display reinforcement message
-            reinforcementMessage?.let { message ->
+            // Message display
+            uiState.message?.let { message ->
                 Text(
                     message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (controller.isGameOver())
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(8.dp)
                 )
             }
 
-            gameMap?.let { map ->
+            // Combat result display
+            uiState.lastCombatResult?.let { combat ->
                 Column(
-                    modifier = Modifier.padding(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(8.dp)
                 ) {
                     Text(
-                        "Total Territories: ${map.territories.size}",
+                        "🎲 Combat Result:",
                         style = MaterialTheme.typography.bodyLarge
                     )
-
-                    // Player 0 stats
-                    Column(
-                        modifier = Modifier.padding(top = 8.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            "Player 0 (Purple):",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = GameColors.Player0
-                        )
-                        Text(
-                            "  Territories: ${player0State.territoryCount}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "  Total Armies: ${player0State.totalArmies}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "  Largest Connected: ${player0State.largestConnectedSize}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (player0State.reserveArmies > 0) {
-                            Text(
-                                "  Reserve: ${player0State.reserveArmies}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-
-                    // Player 1 stats
-                    Column(
-                        modifier = Modifier.padding(top = 8.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            "Player 1 (Green):",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = GameColors.Player1
-                        )
-                        Text(
-                            "  Territories: ${player1State.territoryCount}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "  Total Armies: ${player1State.totalArmies}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "  Largest Connected: ${player1State.largestConnectedSize}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (player1State.reserveArmies > 0) {
-                            Text(
-                                "  Reserve: ${player1State.reserveArmies}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-
-                // Use BoxWithConstraints to measure actual available space for map
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    val density = LocalDensity.current
-
-                    // Calculate responsive cell dimensions based on actual available space
-                    val renderParams = with(density) {
-                        calculateCellDimensions(
-                            maxWidth.toPx(),
-                            maxHeight.toPx()
-                        )
-                    }
-
-                    MapRenderer(
-                        map = map,
-                        cellWidth = renderParams.cellWidth,
-                        cellHeight = renderParams.cellHeight,
-                        fontSize = renderParams.fontSize
+                    Text(
+                        "Attacker: [${combat.attackerRoll.joinToString(", ")}] = ${combat.attackerTotal}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Defender: [${combat.defenderRoll.joinToString(", ")}] = ${combat.defenderTotal}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        if (combat.attackerWins) "✅ Attacker Wins!" else "🛡️ Defender Wins!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (combat.attackerWins)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
                     )
                 }
             }
+        }
+
+        // Player stats
+        Row(
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier.fillMaxWidth().padding(8.dp)
+        ) {
+            // Player 0 stats
+            Column(horizontalAlignment = Alignment.Start) {
+                Text(
+                    "Player 0 (Purple)",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = GameColors.Player0
+                )
+                Text(
+                    "Territories: ${gameState.players[0].territoryCount}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Armies: ${gameState.players[0].totalArmies}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Connected: ${gameState.players[0].largestConnectedSize}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (gameState.players[0].reserveArmies > 0) {
+                    Text(
+                        "Reserve: ${gameState.players[0].reserveArmies}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            // Player 1 stats
+            Column(horizontalAlignment = Alignment.Start) {
+                Text(
+                    "Player 1 (Green)",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = GameColors.Player1
+                )
+                Text(
+                    "Territories: ${gameState.players[1].territoryCount}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Armies: ${gameState.players[1].totalArmies}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Connected: ${gameState.players[1].largestConnectedSize}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (gameState.players[1].reserveArmies > 0) {
+                    Text(
+                        "Reserve: ${gameState.players[1].reserveArmies}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        // Map rendering
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val density = LocalDensity.current
+            val renderParams = with(density) {
+                calculateCellDimensions(maxWidth.toPx(), maxHeight.toPx())
+            }
+
+            MapRenderer(
+                map = gameState.map,
+                cellWidth = renderParams.cellWidth,
+                cellHeight = renderParams.cellHeight,
+                fontSize = renderParams.fontSize,
+                highlightedTerritories = when (val decision = uiState.currentBotDecision) {
+                    is BotDecision.Attack -> setOf(decision.fromTerritoryId, decision.toTerritoryId)
+                    else -> emptySet()
+                },
+                attackFromTerritory = when (val decision = uiState.currentBotDecision) {
+                    is BotDecision.Attack -> decision.fromTerritoryId
+                    else -> null
+                }
+            )
         }
     }
 }
@@ -277,12 +349,13 @@ fun MapRenderer(
     cellWidth: Float,
     cellHeight: Float,
     fontSize: Float,
+    highlightedTerritories: Set<Int> = emptySet(),
+    attackFromTerritory: Int? = null,
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
-    // Calculate actual map size based on grid dimensions and cell sizes
     val mapWidth = with(density) {
         ((HexGrid.GRID_WIDTH + 0.5f) * cellWidth).toDp()
     }
@@ -295,7 +368,6 @@ fun MapRenderer(
             .width(mapWidth)
             .height(mapHeight)
     ) {
-
         // First pass: Fill all cells with territory colors
         for (i in map.cells.indices) {
             val territoryId = map.cells[i]
@@ -309,7 +381,6 @@ fun MapRenderer(
                     else -> Color.Gray
                 }
 
-                // Draw filled hexagon for this cell
                 val hexPath = buildHexagonPath(cellPos.first, cellPos.second, cellWidth, cellHeight)
                 drawPath(
                     path = hexPath,
@@ -319,19 +390,17 @@ fun MapRenderer(
             }
         }
 
-        // Second pass: Draw borders only between different territories
+        // Second pass: Draw borders between territories
         for (i in map.cells.indices) {
             val territoryId = map.cells[i]
             if (territoryId == 0) continue
 
             val neighbors = map.cellNeighbors[i].directions
 
-            // Check each direction for a border
             for (dir in neighbors.indices) {
                 val neighborCell = neighbors[dir]
                 val neighborTerritoryId = if (neighborCell != -1) map.cells[neighborCell] else -1
 
-                // Draw border if neighbor is different territory or edge
                 if (neighborTerritoryId != territoryId) {
                     val cellPos = HexGrid.getCellPosition(i, cellWidth, cellHeight)
                     drawHexEdge(
@@ -347,14 +416,39 @@ fun MapRenderer(
             }
         }
 
-        // Third pass: Draw army counts and cell sizes
+        // Highlight selected territories
+        for (territoryId in highlightedTerritories) {
+            val territory = map.territories.getOrNull(territoryId) ?: continue
+            if (territory.size == 0) continue
+
+            // Draw highlight border around entire territory
+            // Note: map.cells uses 1-based IDs, so we compare with territoryId + 1
+            for (cellIdx in map.cells.indices) {
+                if (map.cells[cellIdx] == territoryId + 1) {
+                    val cellPos = HexGrid.getCellPosition(cellIdx, cellWidth, cellHeight)
+                    val highlightColor = if (territoryId == attackFromTerritory) {
+                        Color.Red // Attacking territory
+                    } else {
+                        Color.Yellow // Defending territory
+                    }
+
+                    // Draw thicker border for highlighted territories
+                    val hexPath = buildHexagonPath(cellPos.first, cellPos.second, cellWidth, cellHeight)
+                    drawPath(
+                        path = hexPath,
+                        color = highlightColor,
+                        style = Stroke(width = max(4f, 6f * (cellWidth / ORIGINAL_CELL_WIDTH)))
+                    )
+                }
+            }
+        }
+
+        // Third pass: Draw army counts and territory IDs
         for (territory in map.territories) {
             if (territory.size == 0) continue
 
             val centerPos = HexGrid.getCellPosition(territory.centerPos, cellWidth, cellHeight)
-
-            // Display format: "armies (cells)"
-            val displayText = "${territory.armyCount} (${territory.size})"
+            val displayText = "${territory.armyCount} (${territory.id})"
 
             val textLayoutResult = textMeasurer.measure(
                 text = displayText,
@@ -364,7 +458,6 @@ fun MapRenderer(
                 )
             )
 
-            // Center the text better
             val textX = centerPos.first + cellWidth / 2 - textLayoutResult.size.width / 2
             val textY = centerPos.second + cellHeight / 2 - textLayoutResult.size.height / 2
 
@@ -378,10 +471,6 @@ fun MapRenderer(
 
 /**
  * Build a path for a single hexagon cell
- * Creates a pointy-top hexagon that tiles seamlessly
- *
- * For proper vertical tiling, hexagons must be taller than the cellHeight spacing.
- * The hexagon height is cellHeight * 4/3 to ensure vertical overlap between rows.
  */
 private fun buildHexagonPath(
     x: Float,
@@ -391,22 +480,16 @@ private fun buildHexagonPath(
 ): Path {
     val path = Path()
     val halfWidth = cellWidth / 2f
-
-    // Hexagon needs to be taller than cellHeight for proper vertical tiling
-    // Height = cellHeight * 4/3 ensures rows overlap by 25%
     val hexHeight = cellHeight * 4f / 3f
     val quarterHexHeight = hexHeight / 4f
-
-    // Small overlap to prevent anti-aliasing gaps
     val overlap = 0.6f
 
-    // Pointy-top hexagon vertices with slight expansion
-    path.moveTo(x + halfWidth, y - overlap)                                // top
-    path.lineTo(x + cellWidth + overlap, y + quarterHexHeight)             // top-right
-    path.lineTo(x + cellWidth + overlap, y + hexHeight - quarterHexHeight) // bottom-right
-    path.lineTo(x + halfWidth, y + hexHeight + overlap)                    // bottom
-    path.lineTo(x - overlap, y + hexHeight - quarterHexHeight)             // bottom-left
-    path.lineTo(x - overlap, y + quarterHexHeight)                         // top-left
+    path.moveTo(x + halfWidth, y - overlap)
+    path.lineTo(x + cellWidth + overlap, y + quarterHexHeight)
+    path.lineTo(x + cellWidth + overlap, y + hexHeight - quarterHexHeight)
+    path.lineTo(x + halfWidth, y + hexHeight + overlap)
+    path.lineTo(x - overlap, y + hexHeight - quarterHexHeight)
+    path.lineTo(x - overlap, y + quarterHexHeight)
     path.close()
 
     return path
@@ -414,7 +497,6 @@ private fun buildHexagonPath(
 
 /**
  * Draw a single edge of a hexagon
- * Direction: 0=upper-right, 1=right, 2=lower-right, 3=lower-left, 4=left, 5=upper-left
  */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHexEdge(
     x: Float,
@@ -426,19 +508,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHexEdge(
     strokeWidth: Float = 3f
 ) {
     val halfWidth = cellWidth / 2f
-
-    // Match the taller hexagon height from buildHexagonPath
     val hexHeight = cellHeight * 4f / 3f
     val quarterHexHeight = hexHeight / 4f
 
-    // Define edge endpoints based on direction (matches buildHexagonPath vertices)
     val (x1, y1, x2, y2) = when (direction) {
-        0 -> listOf(x + halfWidth, y, x + cellWidth, y + quarterHexHeight) // top to top-right
-        1 -> listOf(x + cellWidth, y + quarterHexHeight, x + cellWidth, y + hexHeight - quarterHexHeight) // top-right to bottom-right
-        2 -> listOf(x + cellWidth, y + hexHeight - quarterHexHeight, x + halfWidth, y + hexHeight) // bottom-right to bottom
-        3 -> listOf(x + halfWidth, y + hexHeight, x, y + hexHeight - quarterHexHeight) // bottom to bottom-left
-        4 -> listOf(x, y + hexHeight - quarterHexHeight, x, y + quarterHexHeight) // bottom-left to top-left
-        5 -> listOf(x, y + quarterHexHeight, x + halfWidth, y) // top-left to top
+        0 -> listOf(x + halfWidth, y, x + cellWidth, y + quarterHexHeight)
+        1 -> listOf(x + cellWidth, y + quarterHexHeight, x + cellWidth, y + hexHeight - quarterHexHeight)
+        2 -> listOf(x + cellWidth, y + hexHeight - quarterHexHeight, x + halfWidth, y + hexHeight)
+        3 -> listOf(x + halfWidth, y + hexHeight, x, y + hexHeight - quarterHexHeight)
+        4 -> listOf(x, y + hexHeight - quarterHexHeight, x, y + quarterHexHeight)
+        5 -> listOf(x, y + quarterHexHeight, x + halfWidth, y)
         else -> return
     }
 
