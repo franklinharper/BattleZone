@@ -186,15 +186,20 @@ object MapGenerator {
             }
         }
 
-        // Remove territories that are too small
+        // Remove territories that are too small (JavaScript lines 250-257)
+        // Mark territories with size <= 5 for deletion
+        val isDeleted = BooleanArray(maxTerritoryId + 1) { false }
         for (territoryId in 1..maxTerritoryId) {
             if (territorySizes[territoryId] < MIN_TERRITORY_SIZE) {
-                // Assign cells to neighboring territory
-                for (i in cells.indices) {
-                    if (cells[i] == territoryId) {
-                        cells[i] = findNeighboringTerritory(cells, i) ?: 0
-                    }
-                }
+                isDeleted[territoryId] = true
+            }
+        }
+
+        // Set all cells in deleted territories to 0 (unassigned)
+        for (i in cells.indices) {
+            val territoryId = cells[i]
+            if (territoryId > 0 && territoryId <= maxTerritoryId && isDeleted[territoryId]) {
+                cells[i] = 0
             }
         }
 
