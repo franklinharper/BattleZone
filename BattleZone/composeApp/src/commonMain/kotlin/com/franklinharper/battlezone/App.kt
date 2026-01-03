@@ -21,6 +21,68 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.max
+import kotlin.math.min
+
+// Constants for responsive layout
+private const val ORIGINAL_CELL_WIDTH = 27f
+private const val ORIGINAL_CELL_HEIGHT = 18f
+private const val MIN_CELL_WIDTH = 10f
+private const val MIN_CELL_HEIGHT = 7f
+private const val ORIGINAL_FONT_SIZE = 12f
+private const val MIN_FONT_SIZE = 8f
+private const val MAX_FONT_SIZE = 16f
+private const val ESTIMATED_FIXED_HEIGHT_DP = 204
+
+/**
+ * Data class to hold calculated rendering parameters
+ */
+data class MapRenderingParams(
+    val cellWidth: Float,
+    val cellHeight: Float,
+    val fontSize: Float
+)
+
+/**
+ * Calculate optimal cell dimensions to fit the map within available space
+ * while maintaining the hexagon aspect ratio
+ */
+fun calculateCellDimensions(
+    availableWidthPx: Float,
+    availableHeightPx: Float
+): MapRenderingParams {
+    // Calculate scale factors for both dimensions
+    // Grid needs (GRID_WIDTH + 0.5) * cellWidth for odd row offsets
+    val scaleFromWidth = (availableWidthPx * 2f) / ((HexGrid.GRID_WIDTH * 2 + 1) * ORIGINAL_CELL_WIDTH)
+    val scaleFromHeight = availableHeightPx / (HexGrid.GRID_HEIGHT * ORIGINAL_CELL_HEIGHT)
+
+    // Use the smaller scale factor to ensure map fits in both dimensions
+    val scale = min(scaleFromWidth, scaleFromHeight)
+
+    // Apply scale to original dimensions
+    val cellWidth = ORIGINAL_CELL_WIDTH * scale
+    val cellHeight = ORIGINAL_CELL_HEIGHT * scale
+
+    // Apply minimum size constraints
+    val finalCellWidth = max(cellWidth, MIN_CELL_WIDTH)
+    val finalCellHeight = max(cellHeight, MIN_CELL_HEIGHT)
+
+    // Calculate scaled font size
+    val fontSize = calculateFontSize(finalCellWidth)
+
+    return MapRenderingParams(finalCellWidth, finalCellHeight, fontSize)
+}
+
+/**
+ * Calculate font size based on cell scaling factor
+ * Ensures text remains readable at all scales
+ */
+fun calculateFontSize(cellWidth: Float): Float {
+    val scaleFactor = cellWidth / ORIGINAL_CELL_WIDTH
+    val scaledSize = ORIGINAL_FONT_SIZE * scaleFactor
+    return scaledSize.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+}
 
 @Composable
 @Preview
@@ -80,19 +142,59 @@ fun App() {
                     }
                 }
 
-                MapRenderer(map = map, modifier = Modifier.fillMaxSize())
+                // Use BoxWithConstraints to measure actual available space for map
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    val density = LocalDensity.current
+
+                    // Calculate responsive cell dimensions based on actual available space
+                    val renderParams = with(density) {
+                        calculateCellDimensions(
+                            maxWidth.toPx(),
+                            maxHeight.toPx()
+                        )
+                    }
+
+                    MapRenderer(
+                        map = map,
+                        cellWidth = renderParams.cellWidth,
+                        cellHeight = renderParams.cellHeight,
+                        fontSize = renderParams.fontSize
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
+fun MapRenderer(
+    map: GameMap,
+    cellWidth: Float,
+    cellHeight: Float,
+    fontSize: Float,
+    modifier: Modifier = Modifier
+) {
     val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
 
-    Canvas(modifier = modifier) {
-        val cellWidth = 27f
-        val cellHeight = 18f
+    // Calculate actual map size based on grid dimensions and cell sizes
+    val mapWidth = with(density) {
+        ((HexGrid.GRID_WIDTH + 0.5f) * cellWidth).toDp()
+    }
+    val mapHeight = with(density) {
+        (HexGrid.GRID_HEIGHT * cellHeight).toDp()
+    }
+
+    Canvas(
+        modifier = modifier
+            .width(mapWidth)
+            .height(mapHeight)
+    ) {
 
         // First pass: Fill all cells with territory colors
         for (i in map.cells.indices) {
@@ -132,7 +234,15 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
                 // Draw border if neighbor is different territory or edge
                 if (neighborTerritoryId != territoryId) {
                     val cellPos = HexGrid.getCellPosition(i, cellWidth, cellHeight)
-                    drawHexEdge(cellPos.first, cellPos.second, cellWidth, cellHeight, dir, GameColors.TerritoryBorder)
+                    drawHexEdge(
+                        cellPos.first,
+                        cellPos.second,
+                        cellWidth,
+                        cellHeight,
+                        dir,
+                        GameColors.TerritoryBorder,
+                        max(1f, 3f * (cellWidth / ORIGINAL_CELL_WIDTH))
+                    )
                 }
             }
         }
@@ -150,7 +260,7 @@ fun MapRenderer(map: GameMap, modifier: Modifier = Modifier) {
                 text = displayText,
                 style = TextStyle(
                     color = GameColors.TerritoryText,
-                    fontSize = 12.sp
+                    fontSize = fontSize.sp
                 )
             )
 
@@ -212,7 +322,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHexEdge(
     cellWidth: Float,
     cellHeight: Float,
     direction: Int,
-    color: Color
+    color: Color,
+    strokeWidth: Float = 3f
 ) {
     val halfWidth = cellWidth / 2f
 
@@ -235,6 +346,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHexEdge(
         color = color,
         start = Offset(x1, y1),
         end = Offset(x2, y2),
-        strokeWidth = 3f
+        strokeWidth = strokeWidth
     )
 }
