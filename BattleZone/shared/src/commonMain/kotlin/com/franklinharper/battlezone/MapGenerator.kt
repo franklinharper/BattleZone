@@ -1,0 +1,413 @@
+package com.franklinharper.battlezone
+
+/**
+ * Map generator using percolation-based territory growth algorithm
+ * Based on Dice Wars implementation
+ */
+object MapGenerator {
+    private const val MIN_TERRITORIES = 18
+    private const val MAX_TERRITORIES = 32
+    private const val TARGET_TERRITORY_SIZE = 8
+    private const val MIN_TERRITORY_SIZE = 6
+
+    /**
+     * Generate a complete game map
+     */
+    fun generate(seed: Long? = null): GameMap {
+        val gameRandom = GameRandom(seed)
+
+        // Build cell adjacency
+        val cellNeighbors = HexGrid.buildCellNeighbors()
+
+        // Generate territories using percolation
+        val cells = IntArray(HexGrid.TOTAL_CELLS) { 0 }
+        val territoryCount = generateTerritories(cells, gameRandom)
+
+        // Create territory objects
+        val territories = createTerritories(cells, territoryCount)
+
+        // Calculate territory properties
+        calculateTerritoryProperties(cells, territories)
+
+        // Calculate adjacency
+        calculateTerritoryAdjacency(cells, territories, cellNeighbors)
+
+        // Trace borders
+        traceTerritoryBorders(cells, territories, cellNeighbors)
+
+        // Assign territories to players
+        assignTerritories(territories, gameRandom)
+
+        // Distribute armies
+        distributeStartingArmies(territories, gameRandom)
+
+        val map = GameMap(
+            gridWidth = HexGrid.GRID_WIDTH,
+            gridHeight = HexGrid.GRID_HEIGHT,
+            maxTerritories = MAX_TERRITORIES,
+            cells = cells,
+            cellNeighbors = cellNeighbors,
+            territories = territories,
+            playerCount = 2,
+            seed = seed,
+            gameRandom = gameRandom
+        )
+
+        return map
+    }
+
+    /**
+     * Generate territories using percolation algorithm
+     * Returns the number of territories created
+     */
+    private fun generateTerritories(cells: IntArray, random: GameRandom): Int {
+        // Create shuffled array for randomization
+        val shuffleArray = Array(HexGrid.TOTAL_CELLS) { it }
+        random.shuffle(shuffleArray)
+        val shuffleOrder = IntArray(HexGrid.TOTAL_CELLS) { i ->
+            shuffleArray.indexOf(i)
+        }
+
+        // Track which cells are adjacent to existing territories
+        val adjacentCells = BooleanArray(HexGrid.TOTAL_CELLS) { false }
+
+        // Start with one random cell
+        val startCell = random.nextInt(HexGrid.TOTAL_CELLS)
+        adjacentCells[startCell] = true
+
+        var territoryId = 1
+
+        // Generate territories
+        while (territoryId <= MAX_TERRITORIES) {
+            // Find unassigned cell with lowest shuffle number that's adjacent
+            var seedCell = -1
+            var lowestShuffle = Int.MAX_VALUE
+
+            for (i in cells.indices) {
+                if (cells[i] == 0 && adjacentCells[i] && shuffleOrder[i] < lowestShuffle) {
+                    seedCell = i
+                    lowestShuffle = shuffleOrder[i]
+                }
+            }
+
+            if (seedCell == -1) break // No more cells available
+
+            // Grow territory from seed
+            growTerritory(cells, seedCell, territoryId, shuffleOrder, adjacentCells, random)
+
+            territoryId++
+        }
+
+        // Clean up small territories and fill water
+        val finalCount = cleanupTerritories(cells, territoryId - 1)
+
+        return finalCount
+    }
+
+    /**
+     * Grow a single territory from a seed cell using percolation
+     */
+    private fun growTerritory(
+        cells: IntArray,
+        seedCell: Int,
+        territoryId: Int,
+        shuffleOrder: IntArray,
+        adjacentCells: BooleanArray,
+        random: GameRandom
+    ) {
+        var currentCell = seedCell
+        var size = 0
+
+        while (size < TARGET_TERRITORY_SIZE) {
+            // Assign current cell to territory
+            cells[currentCell] = territoryId
+            size++
+
+            // Mark all neighbors as adjacent
+            val neighbors = HexGrid.getAllNeighbors(currentCell)
+            for (neighbor in neighbors) {
+                if (neighbor != -1) {
+                    adjacentCells[neighbor] = true
+                }
+            }
+
+            // Find next cell to grow into (lowest shuffle number among unassigned neighbors)
+            var nextCell = -1
+            var lowestShuffle = Int.MAX_VALUE
+
+            for (neighbor in neighbors) {
+                if (neighbor != -1 && cells[neighbor] == 0 && shuffleOrder[neighbor] < lowestShuffle) {
+                    nextCell = neighbor
+                    lowestShuffle = shuffleOrder[neighbor]
+                }
+            }
+
+            if (nextCell == -1) break // Can't grow anymore
+            currentCell = nextCell
+        }
+    }
+
+    /**
+     * Clean up territories: fill water holes and remove small territories
+     */
+    private fun cleanupTerritories(cells: IntArray, maxTerritoryId: Int): Int {
+        // Fill single-cell water spaces (isolated unassigned cells)
+        fillWaterHoles(cells)
+
+        // Count territory sizes
+        val territorySizes = IntArray(maxTerritoryId + 1) { 0 }
+        for (cell in cells) {
+            if (cell > 0 && cell <= maxTerritoryId) {
+                territorySizes[cell]++
+            }
+        }
+
+        // Remove territories that are too small
+        for (territoryId in 1..maxTerritoryId) {
+            if (territorySizes[territoryId] < MIN_TERRITORY_SIZE) {
+                // Assign cells to neighboring territory
+                for (i in cells.indices) {
+                    if (cells[i] == territoryId) {
+                        cells[i] = findNeighboringTerritory(cells, i) ?: 0
+                    }
+                }
+            }
+        }
+
+        // Renumber territories sequentially
+        return renumberTerritories(cells, maxTerritoryId)
+    }
+
+    /**
+     * Fill isolated single-cell water spaces
+     */
+    private fun fillWaterHoles(cells: IntArray) {
+        for (i in cells.indices) {
+            if (cells[i] == 0) {
+                // Check if surrounded by territories
+                val neighborTerritory = findNeighboringTerritory(cells, i)
+                if (neighborTerritory != null) {
+                    cells[i] = neighborTerritory
+                }
+            }
+        }
+    }
+
+    /**
+     * Find a neighboring territory for a cell
+     */
+    private fun findNeighboringTerritory(cells: IntArray, cellIndex: Int): Int? {
+        val neighbors = HexGrid.getAllNeighbors(cellIndex)
+        for (neighbor in neighbors) {
+            if (neighbor != -1 && cells[neighbor] > 0) {
+                return cells[neighbor]
+            }
+        }
+        return null
+    }
+
+    /**
+     * Renumber territories sequentially (remove gaps)
+     */
+    private fun renumberTerritories(cells: IntArray, maxTerritoryId: Int): Int {
+        val mapping = mutableMapOf<Int, Int>()
+        var newId = 1
+
+        for (oldId in 1..maxTerritoryId) {
+            // Check if this territory still exists
+            if (cells.any { it == oldId }) {
+                mapping[oldId] = newId
+                newId++
+            }
+        }
+
+        // Apply renumbering
+        for (i in cells.indices) {
+            if (cells[i] > 0) {
+                cells[i] = mapping[cells[i]] ?: 0
+            }
+        }
+
+        return newId - 1
+    }
+
+    /**
+     * Create territory objects from cell data
+     */
+    private fun createTerritories(cells: IntArray, territoryCount: Int): Array<Territory> {
+        return Array(territoryCount) { index ->
+            val id = index
+            Territory(
+                id = id,
+                size = 0,
+                centerPos = 0,
+                owner = -1,
+                armyCount = 0,
+                left = Int.MAX_VALUE,
+                right = Int.MIN_VALUE,
+                top = Int.MAX_VALUE,
+                bottom = Int.MIN_VALUE,
+                centerX = 0,
+                centerY = 0,
+                borderCells = intArrayOf(),
+                borderDirections = intArrayOf(),
+                adjacentTerritories = BooleanArray(territoryCount) { false }
+            )
+        }
+    }
+
+    /**
+     * Calculate territory properties (size, bounding box, center)
+     */
+    private fun calculateTerritoryProperties(cells: IntArray, territories: Array<Territory>) {
+        // Calculate size and bounding box
+        for (i in cells.indices) {
+            val territoryId = cells[i]
+            if (territoryId > 0 && territoryId <= territories.size) {
+                val territory = territories[territoryId - 1]
+                territory.size++
+
+                val x = HexGrid.cellX(i)
+                val y = HexGrid.cellY(i)
+
+                territory.left = minOf(territory.left, x)
+                territory.right = maxOf(territory.right, x)
+                territory.top = minOf(territory.top, y)
+                territory.bottom = maxOf(territory.bottom, y)
+            }
+        }
+
+        // Calculate center position
+        for (territory in territories) {
+            val cx = (territory.left + territory.right) / 2
+            val cy = (territory.top + territory.bottom) / 2
+            territory.centerX = cx
+            territory.centerY = cy
+
+            // Find cell closest to center that's not on border
+            var closestCell = -1
+            var minDist = Double.MAX_VALUE
+
+            for (i in cells.indices) {
+                if (cells[i] == territory.id + 1) {
+                    val x = HexGrid.cellX(i)
+                    val y = HexGrid.cellY(i)
+                    val dist = (x - cx) * (x - cx) + (y - cy) * (y - cy).toDouble()
+
+                    if (dist < minDist) {
+                        minDist = dist
+                        closestCell = i
+                    }
+                }
+            }
+
+            territory.centerPos = if (closestCell != -1) closestCell else 0
+        }
+    }
+
+    /**
+     * Calculate territory adjacency
+     */
+    private fun calculateTerritoryAdjacency(
+        cells: IntArray,
+        territories: Array<Territory>,
+        cellNeighbors: Array<CellNeighbors>
+    ) {
+        for (i in cells.indices) {
+            val territoryId = cells[i]
+            if (territoryId == 0) continue
+
+            val neighbors = cellNeighbors[i].directions
+            for (neighbor in neighbors) {
+                if (neighbor != -1) {
+                    val neighborTerritoryId = cells[neighbor]
+                    if (neighborTerritoryId > 0 && neighborTerritoryId != territoryId) {
+                        territories[territoryId - 1].adjacentTerritories[neighborTerritoryId - 1] = true
+                        territories[neighborTerritoryId - 1].adjacentTerritories[territoryId - 1] = true
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Trace territory borders (simplified version)
+     * For Phase 1, we'll use a simple approach
+     */
+    private fun traceTerritoryBorders(
+        cells: IntArray,
+        territories: Array<Territory>,
+        cellNeighbors: Array<CellNeighbors>
+    ) {
+        for (territory in territories) {
+            // Find all cells on the border of this territory
+            val borderCells = mutableListOf<Int>()
+            val borderDirections = mutableListOf<Int>()
+
+            for (i in cells.indices) {
+                if (cells[i] == territory.id + 1) {
+                    // Check if this cell is on the border
+                    val neighbors = cellNeighbors[i].directions
+                    for (dir in neighbors.indices) {
+                        val neighbor = neighbors[dir]
+                        if (neighbor == -1 || cells[neighbor] != cells[i]) {
+                            borderCells.add(i)
+                            borderDirections.add(dir)
+                        }
+                    }
+                }
+            }
+
+            // Store border data (mutable arrays)
+            val newBorderCells = borderCells.toIntArray()
+            val newBorderDirections = borderDirections.toIntArray()
+
+            // Create new territory with border data
+            territories[territory.id] = territory.copy(
+                borderCells = newBorderCells,
+                borderDirections = newBorderDirections
+            )
+        }
+    }
+
+    /**
+     * Assign territories to players
+     */
+    private fun assignTerritories(territories: Array<Territory>, random: GameRandom) {
+        val territoryIndices = territories.indices.toList().toTypedArray()
+        random.shuffle(territoryIndices)
+
+        for (i in territoryIndices.indices) {
+            val territory = territories[territoryIndices[i]]
+            territory.owner = i % 2 // Alternate between player 0 and 1
+        }
+    }
+
+    /**
+     * Distribute starting armies
+     */
+    private fun distributeStartingArmies(territories: Array<Territory>, random: GameRandom) {
+        // Set all territories to 1 army
+        for (territory in territories) {
+            territory.armyCount = 1
+        }
+
+        // Calculate additional armies
+        val additionalArmies = territories.size * 2
+
+        // Distribute additional armies alternating between players
+        repeat(additionalArmies) { index ->
+            val playerId = index % 2
+
+            // Get all territories for this player that have < 8 armies
+            val playerTerritories = territories.filter {
+                it.owner == playerId && it.armyCount < 8
+            }
+
+            if (playerTerritories.isNotEmpty()) {
+                val territory = playerTerritories[random.nextInt(playerTerritories.size)]
+                territory.armyCount++
+            }
+        }
+    }
+}
