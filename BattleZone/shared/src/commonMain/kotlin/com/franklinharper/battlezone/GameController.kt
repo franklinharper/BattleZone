@@ -216,6 +216,14 @@ class GameController(
         GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[0], 0)
         GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[1], 1)
 
+        // Force StateFlow update with new PlayerState copies so UI sees the changes
+        _gameState.value = _gameState.value.copy(
+            players = arrayOf(
+                currentGameState.players[0].copy(),
+                currentGameState.players[1].copy()
+            )
+        )
+
         // Check for victory
         checkVictory()
 
@@ -321,10 +329,14 @@ class GameController(
             message = "Reinforcements: ${messages.joinToString(" | ")}"
         )
 
-        // Return to attack phase
+        // Return to attack phase with new PlayerState copies so UI sees the changes
         _gameState.value = currentState.copy(
             gamePhase = GamePhase.ATTACK,
-            consecutiveSkips = 0
+            consecutiveSkips = 0,
+            players = arrayOf(
+                currentState.players[0].copy(),
+                currentState.players[1].copy()
+            )
         )
     }
 
