@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -17,15 +15,16 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import com.franklinharper.battlezone.*
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
-// Constants for rendering
-private const val ORIGINAL_CELL_WIDTH = 27f
-
 /**
- * Renders the game map with hexagonal territories
+ * Renders the game map with hexagonal territories.
+ *
+ * This component handles:
+ * - Canvas composition and sizing
+ * - Territory click detection
+ * - Text rendering (army counts)
+ * - Delegating actual drawing to TerritoryDrawer
  */
 @Composable
 fun MapRenderer(
@@ -73,103 +72,40 @@ fun MapRenderer(
         )
 
     Canvas(modifier = canvasModifier) {
-        // First pass: Fill all cells with territory colors
-        for (i in map.cells.indices) {
-            val territoryId = map.cells[i]
-            if (territoryId > 0 && territoryId <= map.territories.size) {
-                val territory = map.territories[territoryId - 1]
-                val cellPos = HexGrid.getCellPosition(i, cellWidth, cellHeight)
+        // Helper function to get cell position
+        val getCellPosition: (Int) -> Pair<Float, Float> = { cellIndex ->
+            HexGrid.getCellPosition(cellIndex, cellWidth, cellHeight)
+        }
 
-                val fillColor = when (territory.owner) {
-                    0 -> GameColors.Player0
-                    1 -> GameColors.Player1
-                    else -> Color.Gray
-                }
+        // Pass 1: Fill all territories
+        with(TerritoryDrawer) {
+            drawTerritoryFills(map, cellWidth, cellHeight, getCellPosition)
+        }
 
-                val hexPath = HexRenderingUtils.buildHexagonPath(cellPos.first, cellPos.second, cellWidth, cellHeight)
-                drawPath(
-                    path = hexPath,
-                    color = fillColor,
-                    style = Fill
+        // Pass 2: Draw borders between territories
+        with(TerritoryDrawer) {
+            drawTerritoryBorders(map, cellWidth, cellHeight, getCellPosition)
+        }
+
+        // Pass 3: Draw highlights for selected territories
+        if (highlightedTerritories.isNotEmpty()) {
+            with(TerritoryDrawer) {
+                drawHighlightedTerritories(
+                    map,
+                    highlightedTerritories,
+                    attackFromTerritory,
+                    cellWidth,
+                    cellHeight,
+                    getCellPosition
                 )
             }
         }
 
-        // Second pass: Draw borders between territories
-        for (i in map.cells.indices) {
-            val territoryId = map.cells[i]
-            if (territoryId == 0) continue
-
-            val neighbors = map.cellNeighbors[i].directions
-
-            for (dir in neighbors.indices) {
-                val neighborCell = neighbors[dir]
-                val neighborTerritoryId = if (neighborCell != -1) map.cells[neighborCell] else -1
-
-                if (neighborTerritoryId != territoryId) {
-                    val cellPos = HexGrid.getCellPosition(i, cellWidth, cellHeight)
-                    with(HexRenderingUtils) {
-                        drawHexEdge(
-                            cellPos.first,
-                            cellPos.second,
-                            cellWidth,
-                            cellHeight,
-                            dir,
-                            GameColors.TerritoryBorder,
-                            max(1f, 3f * (cellWidth / ORIGINAL_CELL_WIDTH))
-                        )
-                    }
-                }
-            }
-        }
-
-        // Highlight selected territories - only draw outer edges
-        for (territoryId in highlightedTerritories) {
-            val territory = map.territories.getOrNull(territoryId) ?: continue
-            if (territory.size == 0) continue
-
-            val highlightColor = if (territoryId == attackFromTerritory) {
-                Color.Red // Attacking territory
-            } else {
-                Color.Yellow // Defending territory
-            }
-
-            // Draw highlight border around territory outline only
-            // Note: map.cells uses 1-based IDs, so we compare with territoryId + 1
-            for (cellIdx in map.cells.indices) {
-                if (map.cells[cellIdx] == territoryId + 1) {
-                    val cellPos = HexGrid.getCellPosition(cellIdx, cellWidth, cellHeight)
-                    val neighbors = map.cellNeighbors[cellIdx].directions
-
-                    // Only draw edges that border a different territory (outer edges)
-                    for (dir in neighbors.indices) {
-                        val neighborCell = neighbors[dir]
-                        val neighborTerritoryId = if (neighborCell != -1) map.cells[neighborCell] else -1
-
-                        // Draw edge if it's a boundary (different territory or edge of map)
-                        if (neighborTerritoryId != territoryId + 1) {
-                            with(HexRenderingUtils) {
-                                drawHexEdge(
-                                    cellPos.first,
-                                    cellPos.second,
-                                    cellWidth,
-                                    cellHeight,
-                                    dir,
-                                    highlightColor,
-                                    max(4f, 6f * (cellWidth / ORIGINAL_CELL_WIDTH))
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Third pass: Draw army counts
+        // Pass 4: Draw army counts
         for (territory in map.territories) {
             if (territory.size == 0) continue
 
-            val centerPos = HexGrid.getCellPosition(territory.centerPos, cellWidth, cellHeight)
+            val (centerX, centerY) = getCellPosition(territory.centerPos)
             val displayText = "${territory.armyCount}"
 
             val textLayoutResult = textMeasurer.measure(
@@ -180,8 +116,8 @@ fun MapRenderer(
                 )
             )
 
-            val textX = centerPos.first + cellWidth / 2 - textLayoutResult.size.width / 2
-            val textY = centerPos.second + cellHeight / 2 - textLayoutResult.size.height / 2
+            val textX = centerX + cellWidth / 2 - textLayoutResult.size.width / 2
+            val textY = centerY + cellHeight / 2 - textLayoutResult.size.height / 2
 
             drawText(
                 textLayoutResult = textLayoutResult,
@@ -192,7 +128,7 @@ fun MapRenderer(
 }
 
 /**
- * Find which territory was clicked based on screen coordinates
+ * Find which territory was clicked based on screen coordinates.
  */
 private fun findTerritoryAtPosition(
     x: Float,
@@ -214,7 +150,7 @@ private fun findTerritoryAtPosition(
 }
 
 /**
- * Find which cell (in hex grid) was clicked
+ * Find which cell (in hex grid) was clicked.
  */
 private fun findCellAtPosition(
     x: Float,
