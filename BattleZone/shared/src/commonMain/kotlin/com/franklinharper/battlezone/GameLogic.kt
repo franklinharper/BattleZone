@@ -14,6 +14,10 @@ object GameLogic {
      * @return Size of largest connected group of territories
      */
     fun calculateLargestConnected(map: GameMap, playerId: Int): Int {
+        require(playerId >= 0 && playerId < map.playerCount) {
+            "Invalid player ID: $playerId (must be 0 to ${map.playerCount - 1})"
+        }
+
         val playerTerritories = map.territories
             .filter { it.owner == playerId }
             .map { it.id }
@@ -53,6 +57,10 @@ object GameLogic {
         playerTerritories: Set<Int>,
         visited: MutableSet<Int>
     ): Int {
+        require(territoryId >= 0 && territoryId < map.territories.size) {
+            "Invalid territory ID: $territoryId (must be 0 to ${map.territories.size - 1})"
+        }
+
         if (territoryId in visited) {
             return 0
         }
@@ -89,6 +97,9 @@ object GameLogic {
      * Based on the size of their largest connected component
      */
     fun calculateReinforcements(map: GameMap, playerId: Int): Int {
+        require(playerId >= 0 && playerId < map.playerCount) {
+            "Invalid player ID: $playerId (must be 0 to ${map.playerCount - 1})"
+        }
         return calculateLargestConnected(map, playerId)
     }
 
@@ -111,6 +122,12 @@ object GameLogic {
         reinforcements: Int,
         currentReserve: Int
     ): Int {
+        require(playerId >= 0 && playerId < map.playerCount) {
+            "Invalid player ID: $playerId (must be 0 to ${map.playerCount - 1})"
+        }
+        require(reinforcements >= 0) { "Reinforcements cannot be negative: $reinforcements" }
+        require(currentReserve >= 0) { "Current reserve cannot be negative: $currentReserve" }
+
         val totalToDistribute = reinforcements + currentReserve
         var remainingReserve = 0
 
@@ -139,6 +156,10 @@ object GameLogic {
      * Update player state with current territory and army counts
      */
     fun updatePlayerState(map: GameMap, playerState: PlayerState, playerId: Int) {
+        require(playerId >= 0 && playerId < map.playerCount) {
+            "Invalid player ID: $playerId (must be 0 to ${map.playerCount - 1})"
+        }
+
         val playerTerritories = map.territories.filter { it.owner == playerId }
 
         playerState.territoryCount = playerTerritories.size
