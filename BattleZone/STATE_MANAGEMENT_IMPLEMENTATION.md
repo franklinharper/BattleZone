@@ -2,9 +2,9 @@
 
 ## Summary
 
-This document describes the state management improvements partially implemented for the BattleZone project.
+This document describes the state management improvements implemented for the BattleZone project.
 
-## ✅ Completed
+## Completed
 
 ### 1. GameEvent Sealed Class (`GameEvent.kt`)
 Created a comprehensive event system for the state machine with the following events:
@@ -33,14 +33,18 @@ Implemented full undo/redo system with:
 
 **Location**: `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameCommand.kt`
 
-## 🚧 Needs Completion
+### 3. StateFlow Migration (`GameController.kt`)
+Migrated GameController from manual state management to StateFlow:
+- Removed `onStateChange` callback parameter
+- Replaced `var _gameState: GameState` with `MutableStateFlow<GameState>`
+- Replaced `var _uiState: GameUiState` with `MutableStateFlow<GameUiState>`
+- Added `SharedFlow<GameEvent>` for one-time events
+- Integrated `CommandHistory` for undo/redo support
+- Removed all `notifyStateChanged()` calls - StateFlow automatically notifies observers
 
-### 3. StateFlow Migration
-
-The GameController needs to be migrated from manual state management to StateFlow. Here's the implementation approach:
-
-#### Current State (Manual)
+**Key changes**:
 ```kotlin
+// Before
 class GameController(
     initialMap: GameMap,
     private val onStateChange: () -> Unit = {}
@@ -50,15 +54,9 @@ class GameController(
 
     val gameState: GameState get() = _gameState
     val uiState: GameUiState get() = _uiState
-
-    private fun notifyStateChanged() {
-        onStateChange()
-    }
 }
-```
 
-#### Target State (StateFlow)
-```kotlin
+// After
 class GameController(
     initialMap: GameMap
 ) {
@@ -75,135 +73,70 @@ class GameController(
 }
 ```
 
-#### Migration Steps
+**Location**: `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameController.kt`
 
-1. **Update GameController constructor**:
-   - Remove `onStateChange` callback parameter
-   - Add StateFlow declarations
+### 4. ViewModel Pattern (`GameViewModel.kt`)
+Created GameViewModel for lifecycle-aware state management:
+- Wraps GameController and exposes its StateFlows
+- Provides clean API for UI components
+- Delegates game logic to GameController
 
-2. **Update state access**:
-   - Replace `_gameState.property` with `_gameState.value.property`
-   - Replace `_uiState.property` with `_uiState.value.property`
+**Location**: `composeApp/src/commonMain/kotlin/com/franklinharper/battlezone/GameViewModel.kt`
 
-3. **Update state mutations**:
-   - Replace `_gameState = newState` with `_gameState.value = newState`
-   - Replace `_uiState = newState` with `_uiState.value = newState`
+### 5. UI Integration (`App.kt`, `GameScreen.kt`)
+Updated UI components to use StateFlow and ViewModel:
+- Removed `recompositionTrigger` manual recomposition hack
+- Use `collectAsState()` to observe StateFlows
+- App.kt creates GameViewModel and passes to GameScreen
+- GameScreen uses ViewModel methods for all game actions
 
-4. **Remove manual notifications**:
-   - Delete all `notifyStateChanged()` calls
-   - StateFlow automatically notifies observers
-
-5. **Add event emission**:
-   ```kotlin
-   private suspend fun emitEvent(event: GameEvent) {
-       _events.emit(event)
-   }
-   ```
-
-6. **Update App.kt**:
-   ```kotlin
-   @Composable
-   fun App() {
-       val controller = remember { GameController(MapGenerator.generate()) }
-
-       // Collect state as Compose State
-       val gameState by controller.gameState.collectAsState()
-       val uiState by controller.uiState.collectAsState()
-
-       // Collect events
-       LaunchedEffect(Unit) {
-           controller.events.collect { event ->
-               // Handle one-time events
-               when (event) {
-                   is GameEvent.GameEnded -> { /* show victory screen */ }
-                   // ...
-               }
-           }
-       }
-
-       GameScreen(gameState, uiState, controller)
-   }
-   ```
-
-### 4. ViewModel Pattern
-
-Create a proper ViewModel for lifecycle management:
-
+**Key changes**:
 ```kotlin
-class GameViewModel(initialMap: GameMap) : ViewModel() {
-    private val controller = GameController(initialMap)
-
-    val gameState = controller.gameState
-    val uiState = controller.uiState
-    val events = controller.events
-
-    // Expose commands
-    fun requestBotDecision() = controller.requestBotDecision()
-    fun executeBotDecision() = controller.executeBotDecision()
-    fun selectTerritory(id: Int) = controller.selectTerritory(id)
-    fun skipTurn() = controller.skipTurn()
-
-    // Undo/Redo
-    fun undo() = controller.undo()
-    fun redo() = controller.redo()
-    fun canUndo() = controller.canUndo()
-    fun canRedo() = controller.canRedo()
+// Before
+var recompositionTrigger by remember { mutableStateOf(0) }
+gameController = GameController(
+    initialMap = initialMap,
+    onStateChange = { recompositionTrigger++ }
+)
+key(recompositionTrigger) {
+    // UI content
 }
+
+// After
+val viewModel = GameViewModel(initialMap = initialMap, gameMode = selectedMode)
+val gameState by viewModel.gameState.collectAsState()
+val uiState by viewModel.uiState.collectAsState()
+// UI content - automatically recomposes when state changes
 ```
 
 ## Benefits of This Architecture
 
 1. **Reactive UI** - No manual recomposition triggers needed
-2. **Undo/Redo** - Full command history for reverting actions
-3. **Event System** - Clean separation between state and events
+2. **Undo/Redo Ready** - Full command history for reverting actions
+3. **Event System** - Clean separation between state and one-time events
 4. **Type Safety** - Sealed classes prevent invalid states
 5. **Testability** - StateFlow and Commands are easily testable
 6. **Lifecycle Aware** - ViewModel handles lifecycle correctly
 
-## Testing the Changes
+## Dependencies Added
 
-After completing the migration:
+Added `kotlinx-coroutines-core` to shared module for StateFlow support:
+- `gradle/libs.versions.toml`: Added `kotlinx-coroutines-core` library
+- `shared/build.gradle.kts`: Added `implementation(libs.kotlinx.coroutines.core)`
 
-```kotlin
-@Test
-fun testCommandUndo() {
-    val map = MapGenerator.generate()
-    val controller = GameController(map)
+## Files Modified
 
-    // Execute attack
-    val attackCommand = AttackCommand(...)
-    controller.executeCommand(attackCommand)
+- `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameEvent.kt` - New file
+- `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameCommand.kt` - New file
+- `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameController.kt` - StateFlow migration
+- `shared/build.gradle.kts` - Added coroutines dependency
+- `gradle/libs.versions.toml` - Added coroutines-core library
+- `composeApp/src/commonMain/kotlin/com/franklinharper/battlezone/GameViewModel.kt` - New file
+- `composeApp/src/commonMain/kotlin/com/franklinharper/battlezone/App.kt` - Use ViewModel and collectAsState
+- `composeApp/src/commonMain/kotlin/com/franklinharper/battlezone/presentation/screens/GameScreen.kt` - Use ViewModel
 
-    // Verify state changed
-    assertTrue(/* check state */)
+## Future Enhancements
 
-    // Undo
-    controller.undo()
-
-    // Verify state restored
-    assertTrue(/* check original state */)
-}
-```
-
-## Next Steps
-
-1. Complete StateFlow migration in GameController
-2. Update App.kt to use `collectAsState()`
-3. Create GameViewModel
-4. Add undo/redo UI buttons
-5. Test all state transitions
-6. Add integration tests for command pattern
-
-## Files to Modify
-
-- ✅ `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameEvent.kt` - Complete
-- ✅ `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameCommand.kt` - Complete
-- ⏳ `shared/src/commonMain/kotlin/com/franklinharper/battlezone/GameController.kt` - Needs StateFlow migration
-- ⏳ `composeApp/src/commonMain/kotlin/com/franklinharper/battlezone/App.kt` - Needs `collectAsState()`
-- 📝 `composeApp/src/commonMain/kotlin/com/franklinharper/battlezone/GameViewModel.kt` - To be created
-
-## Resources
-
-- [Kotlin Flow Documentation](https://kotlinlang.org/docs/flow.html)
-- [StateFlow and SharedFlow](https://kotlinlang.org/docs/shared-mutable-state-and-concurrency.html#shared-flow)
-- [Command Pattern](https://refactoring.guru/design-patterns/command)
+1. **Add undo/redo UI controls** - Buttons to undo/redo game actions
+2. **Event handling** - Use `events` SharedFlow for one-time UI events (victory screens, etc.)
+3. **Integration tests** - Add tests for command pattern and state transitions

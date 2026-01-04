@@ -1,5 +1,12 @@
 package com.franklinharper.battlezone
 
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 /**
  * Represents the result of a combat action
  */
@@ -52,27 +59,31 @@ class GameController(
     private val gameMode: GameMode = GameMode.BOT_VS_BOT,
     private val humanPlayerId: Int = 0,
     private val bot0: Bot = DefaultBot(initialMap.gameRandom),
-    private val bot1: Bot = DefaultBot(initialMap.gameRandom),
-    private val onStateChange: () -> Unit = {}
+    private val bot1: Bot = DefaultBot(initialMap.gameRandom)
 ) {
-    private var _gameState: GameState = createInitialGameState(initialMap)
-    private var _uiState: GameUiState = GameUiState()
+    private val _gameState = MutableStateFlow(createInitialGameState(initialMap))
+    val gameState: StateFlow<GameState> = _gameState.asStateFlow()
 
-    val gameState: GameState get() = _gameState
-    val uiState: GameUiState get() = _uiState
+    private val _uiState = MutableStateFlow(GameUiState())
+    val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+
+    private val _events = MutableSharedFlow<GameEvent>()
+    val events: SharedFlow<GameEvent> = _events.asSharedFlow()
+
+    private val commandHistory = CommandHistory()
 
     /**
      * Check if the current player is human
      */
     fun isCurrentPlayerHuman(): Boolean {
-        return gameMode == GameMode.HUMAN_VS_BOT && _gameState.currentPlayerIndex == humanPlayerId
+        return gameMode == GameMode.HUMAN_VS_BOT && _gameState.value.currentPlayerIndex == humanPlayerId
     }
 
     /**
      * Check if the current player is a bot
      */
     fun isCurrentPlayerBot(): Boolean {
-        return gameMode == GameMode.BOT_VS_BOT || _gameState.currentPlayerIndex != humanPlayerId
+        return gameMode == GameMode.BOT_VS_BOT || _gameState.value.currentPlayerIndex != humanPlayerId
     }
 
     /**
@@ -84,10 +95,6 @@ class GameController(
         } else {
             "Player $playerId"
         }
-    }
-
-    private fun notifyStateChanged() {
-        onStateChange()
     }
 
     /**
@@ -117,28 +124,27 @@ class GameController(
      * Request the current bot to make a decision
      */
     fun requestBotDecision() {
-        if (_gameState.gamePhase != GamePhase.ATTACK) return
-        if (_gameState.winner != null) return
+        if (_gameState.value.gamePhase != GamePhase.ATTACK) return
+        if (_gameState.value.winner != null) return
 
-        val currentPlayer = _gameState.currentPlayerIndex
+        val currentPlayer = _gameState.value.currentPlayerIndex
         val bot = if (currentPlayer == 0) bot0 else bot1
-        val decision = bot.decide(_gameState.map, currentPlayer)
+        val decision = bot.decide(_gameState.value.map, currentPlayer)
 
-        _uiState = _uiState.copy(
+        _uiState.value = _uiState.value.copy(
             currentBotDecision = decision,
             message = when (decision) {
                 is BotDecision.Attack -> "${getPlayerLabel(currentPlayer)} attacks: Territory ${decision.fromTerritoryId} → ${decision.toTerritoryId}"
                 is BotDecision.Skip -> "${getPlayerLabel(currentPlayer)} skips their turn"
             }
         )
-        notifyStateChanged()
     }
 
     /**
      * Execute the current bot's decision (attack or skip)
      */
     fun executeBotDecision() {
-        val decision = _uiState.currentBotDecision ?: return
+        val decision = _uiState.value.currentBotDecision ?: return
 
         when (decision) {
             is BotDecision.Attack -> executeAttack(decision.fromTerritoryId, decision.toTerritoryId)
@@ -146,26 +152,26 @@ class GameController(
         }
 
         // Clear the decision after execution
-        _uiState = _uiState.copy(currentBotDecision = null)
-        notifyStateChanged()
+        _uiState.value = _uiState.value.copy(currentBotDecision = null)
     }
 
     /**
      * Execute an attack from one territory to another
      */
     private fun executeAttack(fromTerritoryId: Int, toTerritoryId: Int) {
-        val fromTerritory = _gameState.map.territories.getOrNull(fromTerritoryId) ?: return
-        val toTerritory = _gameState.map.territories.getOrNull(toTerritoryId) ?: return
+        val currentGameState = _gameState.value
+        val fromTerritory = currentGameState.map.territories.getOrNull(fromTerritoryId) ?: return
+        val toTerritory = currentGameState.map.territories.getOrNull(toTerritoryId) ?: return
 
         // Validate attack
-        if (fromTerritory.owner != _gameState.currentPlayerIndex) return
+        if (fromTerritory.owner != currentGameState.currentPlayerIndex) return
         if (fromTerritory.armyCount <= 1) return
         if (!fromTerritory.adjacentTerritories[toTerritoryId]) return
-        if (toTerritory.owner == _gameState.currentPlayerIndex) return
+        if (toTerritory.owner == currentGameState.currentPlayerIndex) return
 
         // Roll dice
-        val attackerRoll = _gameState.map.gameRandom.rollDice(fromTerritory.armyCount)
-        val defenderRoll = _gameState.map.gameRandom.rollDice(toTerritory.armyCount)
+        val attackerRoll = currentGameState.map.gameRandom.rollDice(fromTerritory.armyCount)
+        val defenderRoll = currentGameState.map.gameRandom.rollDice(toTerritory.armyCount)
 
         val attackerTotal = attackerRoll.sum()
         val defenderTotal = defenderRoll.sum()
@@ -188,9 +194,9 @@ class GameController(
             toTerritory.armyCount = armiesTransferred
             fromTerritory.armyCount = 1
 
-            _uiState = _uiState.copy(
+            _uiState.value = _uiState.value.copy(
                 lastCombatResult = combatResult,
-                message = "${getPlayerLabel(_gameState.currentPlayerIndex)} wins! " +
+                message = "${getPlayerLabel(currentGameState.currentPlayerIndex)} wins! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
                         "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal"
             )
@@ -198,7 +204,7 @@ class GameController(
             // Defender wins: attacker loses all armies except 1
             fromTerritory.armyCount = 1
 
-            _uiState = _uiState.copy(
+            _uiState.value = _uiState.value.copy(
                 lastCombatResult = combatResult,
                 message = "${getPlayerLabel(toTerritory.owner)} defends! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
@@ -207,35 +213,33 @@ class GameController(
         }
 
         // Update player states
-        GameLogic.updatePlayerState(_gameState.map, _gameState.players[0], 0)
-        GameLogic.updatePlayerState(_gameState.map, _gameState.players[1], 1)
+        GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[0], 0)
+        GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[1], 1)
 
         // Check for victory
         checkVictory()
 
-        if (_gameState.winner == null) {
+        if (_gameState.value.winner == null) {
             // Reset consecutive skips since an attack occurred
-            _gameState = _gameState.copy(consecutiveSkips = 0)
+            _gameState.value = _gameState.value.copy(consecutiveSkips = 0)
 
             // Switch to next player
             nextPlayer()
         }
-
-        notifyStateChanged()
     }
 
     /**
      * Skip the current player's turn
      */
     fun skipTurn() {
-        val newConsecutiveSkips = _gameState.consecutiveSkips + 1
+        val newConsecutiveSkips = _gameState.value.consecutiveSkips + 1
 
-        _uiState = _uiState.copy(
-            message = "${getPlayerLabel(_gameState.currentPlayerIndex)} skipped. " +
+        _uiState.value = _uiState.value.copy(
+            message = "${getPlayerLabel(_gameState.value.currentPlayerIndex)} skipped. " +
                     "Consecutive skips: $newConsecutiveSkips"
         )
 
-        _gameState = _gameState.copy(consecutiveSkips = newConsecutiveSkips)
+        _gameState.value = _gameState.value.copy(consecutiveSkips = newConsecutiveSkips)
 
         // Check if both players have skipped consecutively
         if (newConsecutiveSkips >= 2) {
@@ -243,33 +247,33 @@ class GameController(
         } else {
             nextPlayer()
         }
-
-        notifyStateChanged()
     }
 
     /**
      * Switch to the next player
      */
     private fun nextPlayer() {
-        val nextPlayerIndex = (_gameState.currentPlayerIndex + 1) % _gameState.map.playerCount
-        _gameState = _gameState.copy(currentPlayerIndex = nextPlayerIndex)
+        val currentState = _gameState.value
+        val nextPlayerIndex = (currentState.currentPlayerIndex + 1) % currentState.map.playerCount
+        _gameState.value = currentState.copy(currentPlayerIndex = nextPlayerIndex)
     }
 
     /**
      * Check if the current player has won (owns all territories)
      */
     private fun checkVictory() {
-        val currentPlayer = _gameState.currentPlayerIndex
-        val allTerritoriesOwned = _gameState.map.territories.all { territory ->
+        val currentState = _gameState.value
+        val currentPlayer = currentState.currentPlayerIndex
+        val allTerritoriesOwned = currentState.map.territories.all { territory ->
             territory.size == 0 || territory.owner == currentPlayer
         }
 
         if (allTerritoriesOwned) {
-            _gameState = _gameState.copy(
+            _gameState.value = currentState.copy(
                 winner = currentPlayer,
                 gamePhase = GamePhase.GAME_OVER
             )
-            _uiState = _uiState.copy(
+            _uiState.value = _uiState.value.copy(
                 message = "🎉 ${getPlayerLabel(currentPlayer)} wins the game! 🎉"
             )
         }
@@ -279,8 +283,8 @@ class GameController(
      * Start the reinforcement phase
      */
     private fun startReinforcementPhase() {
-        _gameState = _gameState.copy(gamePhase = GamePhase.REINFORCEMENT)
-        _uiState = _uiState.copy(
+        _gameState.value = _gameState.value.copy(gamePhase = GamePhase.REINFORCEMENT)
+        _uiState.value = _uiState.value.copy(
             message = "Reinforcement Phase: Both players skipped. Distributing reinforcements..."
         )
     }
@@ -289,131 +293,134 @@ class GameController(
      * Execute the reinforcement phase for both players
      */
     fun executeReinforcementPhase() {
-        if (_gameState.gamePhase != GamePhase.REINFORCEMENT) return
+        val currentState = _gameState.value
+        if (currentState.gamePhase != GamePhase.REINFORCEMENT) return
 
         val messages = mutableListOf<String>()
 
         // Reinforce both players
-        for (playerId in 0 until _gameState.map.playerCount) {
-            val playerState = _gameState.players[playerId]
-            val reinforcements = GameLogic.calculateReinforcements(_gameState.map, playerId)
+        for (playerId in 0 until currentState.map.playerCount) {
+            val playerState = currentState.players[playerId]
+            val reinforcements = GameLogic.calculateReinforcements(currentState.map, playerId)
 
             val newReserve = GameLogic.distributeReinforcements(
-                _gameState.map,
+                currentState.map,
                 playerId,
                 reinforcements,
                 playerState.reserveArmies
             )
 
             playerState.reserveArmies = newReserve
-            GameLogic.updatePlayerState(_gameState.map, playerState, playerId)
+            GameLogic.updatePlayerState(currentState.map, playerState, playerId)
 
             messages.add("${getPlayerLabel(playerId)}: +$reinforcements armies" +
                 if (newReserve > 0) " (Reserve: $newReserve)" else "")
         }
 
-        _uiState = _uiState.copy(
+        _uiState.value = _uiState.value.copy(
             message = "Reinforcements: ${messages.joinToString(" | ")}"
         )
 
         // Return to attack phase
-        _gameState = _gameState.copy(
+        _gameState.value = currentState.copy(
             gamePhase = GamePhase.ATTACK,
             consecutiveSkips = 0
         )
-
-        notifyStateChanged()
     }
 
     /**
      * Reset to a new game
      */
     fun newGame(map: GameMap) {
-        _gameState = createInitialGameState(map)
-        _uiState = GameUiState(message = "New game started! ${getPlayerLabel(_gameState.currentPlayerIndex)} goes first.")
-        notifyStateChanged()
+        _gameState.value = createInitialGameState(map)
+        _uiState.value = GameUiState(message = "New game started! ${getPlayerLabel(_gameState.value.currentPlayerIndex)} goes first.")
+        commandHistory.clear()
     }
 
     /**
      * Check if the game is over
      */
-    fun isGameOver(): Boolean = _gameState.winner != null
+    fun isGameOver(): Boolean = _gameState.value.winner != null
 
     /**
      * Get the current player index
      */
-    fun getCurrentPlayer(): Int = _gameState.currentPlayerIndex
+    fun getCurrentPlayer(): Int = _gameState.value.currentPlayerIndex
+
+    /**
+     * Check if undo is available
+     */
+    fun canUndo(): Boolean = commandHistory.canUndo()
+
+    /**
+     * Check if redo is available
+     */
+    fun canRedo(): Boolean = commandHistory.canRedo()
 
     /**
      * Human player selects a territory (for attack)
      */
     fun selectTerritory(territoryId: Int) {
+        val currentState = _gameState.value
+        val currentUiState = _uiState.value
+
         if (!isCurrentPlayerHuman()) {
-            _uiState = _uiState.copy(errorMessage = "Not your turn!")
-            notifyStateChanged()
+            _uiState.value = currentUiState.copy(errorMessage = "Not your turn!")
             return
         }
 
-        if (_gameState.gamePhase != GamePhase.ATTACK) {
-            _uiState = _uiState.copy(errorMessage = "Cannot attack during ${_gameState.gamePhase} phase")
-            notifyStateChanged()
+        if (currentState.gamePhase != GamePhase.ATTACK) {
+            _uiState.value = currentUiState.copy(errorMessage = "Cannot attack during ${currentState.gamePhase} phase")
             return
         }
 
-        val territory = _gameState.map.territories.getOrNull(territoryId)
+        val territory = currentState.map.territories.getOrNull(territoryId)
         if (territory == null) {
-            _uiState = _uiState.copy(errorMessage = "Invalid territory")
-            notifyStateChanged()
+            _uiState.value = currentUiState.copy(errorMessage = "Invalid territory")
             return
         }
 
         // If no territory is selected yet, select this one (if it's owned by human)
-        if (_uiState.selectedTerritoryId == null) {
+        if (currentUiState.selectedTerritoryId == null) {
             if (territory.owner != humanPlayerId) {
-                _uiState = _uiState.copy(errorMessage = "You don't own this territory")
-                notifyStateChanged()
+                _uiState.value = currentUiState.copy(errorMessage = "You don't own this territory")
                 return
             }
 
             if (territory.armyCount <= 1) {
-                _uiState = _uiState.copy(errorMessage = "Territory must have more than 1 army to attack")
-                notifyStateChanged()
+                _uiState.value = currentUiState.copy(errorMessage = "Territory must have more than 1 army to attack")
                 return
             }
 
-            _uiState = _uiState.copy(
+            _uiState.value = currentUiState.copy(
                 selectedTerritoryId = territoryId,
                 errorMessage = null,
                 message = "Territory $territoryId selected. Now select an adjacent enemy territory to attack."
             )
-            notifyStateChanged()
         } else {
             // A territory is already selected
-            val fromTerritoryId = _uiState.selectedTerritoryId!!
+            val fromTerritoryId = currentUiState.selectedTerritoryId
 
             // If clicking the same territory again, cancel the selection
             if (territoryId == fromTerritoryId) {
-                _uiState = _uiState.copy(
+                _uiState.value = currentUiState.copy(
                     selectedTerritoryId = null,
                     errorMessage = null,
                     message = "Selection cancelled"
                 )
-                notifyStateChanged()
                 return
             }
 
-            val fromTerritory = _gameState.map.territories[fromTerritoryId]
+            val fromTerritory = currentState.map.territories[fromTerritoryId]
 
             // Validate the attack
             if (territory.owner == humanPlayerId) {
-                _uiState = _uiState.copy(errorMessage = "Cannot attack your own territory")
-                notifyStateChanged()
+                _uiState.value = currentUiState.copy(errorMessage = "Cannot attack your own territory")
                 return
             }
 
             if (!fromTerritory.adjacentTerritories[territoryId]) {
-                _uiState = _uiState.copy(errorMessage = "Territories are not adjacent")
-                notifyStateChanged()
+                _uiState.value = currentUiState.copy(errorMessage = "Territories are not adjacent")
                 return
             }
 
@@ -427,7 +434,7 @@ class GameController(
      */
     private fun executeHumanAttack(fromTerritoryId: Int, toTerritoryId: Int) {
         // Clear selection
-        _uiState = _uiState.copy(
+        _uiState.value = _uiState.value.copy(
             selectedTerritoryId = null,
             errorMessage = null
         )
@@ -440,11 +447,10 @@ class GameController(
      * Cancel the current territory selection
      */
     fun cancelSelection() {
-        _uiState = _uiState.copy(
+        _uiState.value = _uiState.value.copy(
             selectedTerritoryId = null,
             errorMessage = null,
             message = "Selection cancelled"
         )
-        notifyStateChanged()
     }
 }

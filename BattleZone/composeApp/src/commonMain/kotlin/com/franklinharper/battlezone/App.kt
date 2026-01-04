@@ -2,7 +2,6 @@ package com.franklinharper.battlezone
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import com.franklinharper.battlezone.presentation.screens.GameScreen
 import com.franklinharper.battlezone.presentation.screens.ModeSelectionScreen
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -19,8 +18,7 @@ private const val BOT_EXECUTION_DELAY = 1200L
 fun App() {
     MaterialTheme {
         var gameMode by remember { mutableStateOf<GameMode?>(null) }
-        var gameController by remember { mutableStateOf<GameController?>(null) }
-        var recompositionTrigger by remember { mutableStateOf(0) }
+        var viewModel by remember { mutableStateOf<GameViewModel?>(null) }
 
         // Show mode selection if no mode is chosen
         if (gameMode == null) {
@@ -28,46 +26,44 @@ fun App() {
                 onModeSelected = { selectedMode ->
                     gameMode = selectedMode
                     val initialMap = MapGenerator.generate()
-                    gameController = GameController(
+                    viewModel = GameViewModel(
                         initialMap = initialMap,
                         gameMode = selectedMode,
-                        humanPlayerId = 0,
-                        onStateChange = {
-                            recompositionTrigger++
-                        }
+                        humanPlayerId = 0
                     )
                 }
             )
         } else {
-            // Trigger recomposition when state changes
-            key(recompositionTrigger) {
-                gameController?.let { controller ->
-                    // Auto-execute bot turns in Human vs Bot mode
-                    LaunchedEffect(controller.isCurrentPlayerBot(), controller.uiState.currentBotDecision) {
-                        if (gameMode == GameMode.HUMAN_VS_BOT && controller.isCurrentPlayerBot()) {
-                            if (controller.gameState.gamePhase == GamePhase.ATTACK) {
-                                if (controller.uiState.currentBotDecision == null) {
-                                    // Small delay so user can see turn change
-                                    kotlinx.coroutines.delay(BOT_DECISION_DELAY)
-                                    controller.requestBotDecision()
-                                } else {
-                                    // Small delay so user can see the highlighted attack
-                                    kotlinx.coroutines.delay(BOT_EXECUTION_DELAY)
-                                    controller.executeBotDecision()
-                                }
+            viewModel?.let { vm ->
+                // Collect state from StateFlows
+                val gameState by vm.gameState.collectAsState()
+                val uiState by vm.uiState.collectAsState()
+
+                // Auto-execute bot turns in Human vs Bot mode
+                LaunchedEffect(vm.isCurrentPlayerBot(), uiState.currentBotDecision) {
+                    if (gameMode == GameMode.HUMAN_VS_BOT && vm.isCurrentPlayerBot()) {
+                        if (gameState.gamePhase == GamePhase.ATTACK) {
+                            if (uiState.currentBotDecision == null) {
+                                // Small delay so user can see turn change
+                                kotlinx.coroutines.delay(BOT_DECISION_DELAY)
+                                vm.requestBotDecision()
+                            } else {
+                                // Small delay so user can see the highlighted attack
+                                kotlinx.coroutines.delay(BOT_EXECUTION_DELAY)
+                                vm.executeBotDecision()
                             }
                         }
                     }
-
-                    GameScreen(
-                        controller = controller,
-                        gameMode = gameMode!!,
-                        onBackToMenu = {
-                            gameMode = null
-                            gameController = null
-                        }
-                    )
                 }
+
+                GameScreen(
+                    viewModel = vm,
+                    gameMode = gameMode!!,
+                    onBackToMenu = {
+                        gameMode = null
+                        viewModel = null
+                    }
+                )
             }
         }
     }

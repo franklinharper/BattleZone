@@ -6,6 +6,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,10 +21,10 @@ import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
  * Main game screen showing the map and controls
  */
 @Composable
-fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () -> Unit) {
-    // Access state - Compose will read these during composition
-    val gameState = controller.gameState
-    val uiState = controller.uiState
+fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () -> Unit) {
+    // Collect state from StateFlows
+    val gameState by viewModel.gameState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
 
@@ -30,8 +32,8 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
     val territoryClickHandler = remember(gameMode) {
         if (gameMode == GameMode.HUMAN_VS_BOT) {
             { territoryId: Int ->
-                println("Territory clicked: $territoryId, Current player: ${controller.getCurrentPlayer()}, Is human turn: ${controller.isCurrentPlayerHuman()}")
-                controller.selectTerritory(territoryId)
+                println("Territory clicked: $territoryId, Current player: ${viewModel.getCurrentPlayer()}, Is human turn: ${viewModel.isCurrentPlayerHuman()}")
+                viewModel.selectTerritory(territoryId)
             }
         } else {
             null
@@ -59,7 +61,7 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
             Button(
                 onClick = {
                     val newMap = MapGenerator.generate()
-                    controller.newGame(newMap)
+                    viewModel.newGame(newMap)
                 }
             ) {
                 Text("New Game")
@@ -71,45 +73,45 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
 
             // Game phase and mode-specific buttons
             when {
-                controller.isGameOver() -> {
+                viewModel.isGameOver() -> {
                     // Game over, no action button needed
                 }
                 gameState.gamePhase == GamePhase.REINFORCEMENT -> {
                     Button(
                         onClick = {
-                            controller.executeReinforcementPhase()
+                            viewModel.executeReinforcementPhase()
                         }
                     ) {
                         Text("Apply Reinforcements")
                     }
                 }
-                controller.isCurrentPlayerHuman() -> {
+                viewModel.isCurrentPlayerHuman() -> {
                     // Human player's turn - show Skip button
                     Button(
                         onClick = {
-                            controller.skipTurn()
+                            viewModel.skipTurn()
                         }
                     ) {
                         Text("Skip Turn")
                     }
                 }
-                controller.isCurrentPlayerBot() -> {
+                viewModel.isCurrentPlayerBot() -> {
                     // Bot's turn - show manual controls only in Bot vs Bot mode
                     if (gameMode == GameMode.BOT_VS_BOT) {
                         when {
                             uiState.currentBotDecision == null -> {
                                 Button(
                                     onClick = {
-                                        controller.requestBotDecision()
+                                        viewModel.requestBotDecision()
                                     }
                                 ) {
-                                    Text("Player ${controller.getCurrentPlayer()}: Make Decision")
+                                    Text("Player ${viewModel.getCurrentPlayer()}: Make Decision")
                                 }
                             }
                             uiState.currentBotDecision is BotDecision.Attack -> {
                                 Button(
                                     onClick = {
-                                        controller.executeBotDecision()
+                                        viewModel.executeBotDecision()
                                     }
                                 ) {
                                     Text("Execute Attack")
@@ -118,7 +120,7 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
                             uiState.currentBotDecision is BotDecision.Skip -> {
                                 Button(
                                     onClick = {
-                                        controller.executeBotDecision()
+                                        viewModel.executeBotDecision()
                                     }
                                 ) {
                                     Text("Skip Turn")
@@ -137,15 +139,15 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Current turn indicator
-            if (!controller.isGameOver()) {
-                val currentPlayerColor = if (controller.getCurrentPlayer() == 0)
+            if (!viewModel.isGameOver()) {
+                val currentPlayerColor = if (viewModel.getCurrentPlayer() == 0)
                     GameColors.Player0 else GameColors.Player1
 
                 // Show "Your Turn" or "Bot's Turn" for human vs bot mode
                 val turnText = when {
-                    controller.isCurrentPlayerHuman() -> "YOUR TURN"
+                    viewModel.isCurrentPlayerHuman() -> "YOUR TURN"
                     isHumanVsBot -> "BOT'S TURN"
-                    else -> "Current Turn: Player ${controller.getCurrentPlayer()}"
+                    else -> "Current Turn: Player ${viewModel.getCurrentPlayer()}"
                 }
 
                 Text(
@@ -177,7 +179,7 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
                 Text(
                     message,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (controller.isGameOver())
+                    color = if (viewModel.isGameOver())
                         MaterialTheme.colorScheme.error
                     else
                         MaterialTheme.colorScheme.primary,
