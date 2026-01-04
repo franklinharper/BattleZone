@@ -181,6 +181,11 @@ enum class GamePhase {
     GAME_OVER
 }
 
+enum class GameMode {
+    HUMAN_VS_BOT,
+    BOT_VS_BOT
+}
+
 /**
  * Represents a single turn action
  */

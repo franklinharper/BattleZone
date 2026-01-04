@@ -2,6 +2,8 @@ package com.franklinharper.battlezone
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -14,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextMeasurer
@@ -85,34 +88,104 @@ fun calculateFontSize(cellWidth: Float): Float {
 @Preview
 fun App() {
     MaterialTheme {
+        var gameMode by remember { mutableStateOf<GameMode?>(null) }
         var gameController by remember { mutableStateOf<GameController?>(null) }
         var recompositionTrigger by remember { mutableStateOf(0) }
 
-        // Initialize with a new game
-        LaunchedEffect(Unit) {
-            val initialMap = MapGenerator.generate()
-            gameController = GameController(
-                initialMap = initialMap,
-                onStateChange = {
-                    recompositionTrigger++
+        // Show mode selection if no mode is chosen
+        if (gameMode == null) {
+            ModeSelectionScreen(
+                onModeSelected = { selectedMode ->
+                    gameMode = selectedMode
+                    val initialMap = MapGenerator.generate()
+                    gameController = GameController(
+                        initialMap = initialMap,
+                        gameMode = selectedMode,
+                        humanPlayerId = 0,
+                        onStateChange = {
+                            recompositionTrigger++
+                        }
+                    )
                 }
             )
-        }
+        } else {
+            // Trigger recomposition when state changes
+            key(recompositionTrigger) {
+                gameController?.let { controller ->
+                    // Auto-execute bot turns in Human vs Bot mode
+                    LaunchedEffect(controller.isCurrentPlayerBot(), controller.uiState.currentBotDecision) {
+                        if (gameMode == GameMode.HUMAN_VS_BOT && controller.isCurrentPlayerBot()) {
+                            if (controller.gameState.gamePhase == GamePhase.ATTACK) {
+                                if (controller.uiState.currentBotDecision == null) {
+                                    // Small delay so user can see turn change
+                                    kotlinx.coroutines.delay(800)
+                                    controller.requestBotDecision()
+                                } else {
+                                    // Small delay so user can see the highlighted attack
+                                    kotlinx.coroutines.delay(1200)
+                                    controller.executeBotDecision()
+                                }
+                            }
+                        }
+                    }
 
-        // Trigger recomposition when state changes
-        key(recompositionTrigger) {
-            gameController?.let { controller ->
-                BotVsBotGame(controller)
+                    GameScreen(
+                        controller = controller,
+                        gameMode = gameMode!!,
+                        onBackToMenu = {
+                            gameMode = null
+                            gameController = null
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun BotVsBotGame(controller: GameController) {
+fun ModeSelectionScreen(onModeSelected: (GameMode) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            "BattleZone",
+            style = MaterialTheme.typography.displayLarge,
+            modifier = Modifier.padding(bottom = 48.dp)
+        )
+
+        Button(
+            onClick = { onModeSelected(GameMode.HUMAN_VS_BOT) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
+            Text("Human vs Bot", style = MaterialTheme.typography.headlineSmall)
+        }
+
+        Button(
+            onClick = { onModeSelected(GameMode.BOT_VS_BOT) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
+            Text("Bot vs Bot", style = MaterialTheme.typography.headlineSmall)
+        }
+    }
+}
+
+@Composable
+fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () -> Unit) {
     // Access state - Compose will read these during composition
     val gameState = controller.gameState
     val uiState = controller.uiState
+
+    val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
 
     Column(
         modifier = Modifier
@@ -122,7 +195,7 @@ fun BotVsBotGame(controller: GameController) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "BattleZone - Bot vs Bot",
+            if (isHumanVsBot) "BattleZone - Human vs Bot" else "BattleZone - Bot vs Bot",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(8.dp)
         )
@@ -141,7 +214,11 @@ fun BotVsBotGame(controller: GameController) {
                 Text("New Game")
             }
 
-            // Request bot decision or execute action
+            Button(onClick = onBackToMenu) {
+                Text("Back to Menu")
+            }
+
+            // Game phase and mode-specific buttons
             when {
                 controller.isGameOver() -> {
                     // Game over, no action button needed
@@ -155,32 +232,59 @@ fun BotVsBotGame(controller: GameController) {
                         Text("Apply Reinforcements")
                     }
                 }
-                uiState.currentBotDecision == null -> {
+                controller.isCurrentPlayerHuman() -> {
+                    // Human player's turn - show Skip button and cancel selection
                     Button(
                         onClick = {
-                            controller.requestBotDecision()
-                        }
-                    ) {
-                        Text("Player ${controller.getCurrentPlayer()}: Make Decision")
-                    }
-                }
-                uiState.currentBotDecision is BotDecision.Attack -> {
-                    Button(
-                        onClick = {
-                            controller.executeBotDecision()
-                        }
-                    ) {
-                        Text("Execute Attack")
-                    }
-                }
-                uiState.currentBotDecision is BotDecision.Skip -> {
-                    Button(
-                        onClick = {
-                            controller.executeBotDecision()
+                            controller.skipTurn()
                         }
                     ) {
                         Text("Skip Turn")
                     }
+                    if (uiState.selectedTerritoryId != null) {
+                        Button(
+                            onClick = {
+                                controller.cancelSelection()
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+                controller.isCurrentPlayerBot() -> {
+                    // Bot's turn - show manual controls only in Bot vs Bot mode
+                    if (gameMode == GameMode.BOT_VS_BOT) {
+                        when {
+                            uiState.currentBotDecision == null -> {
+                                Button(
+                                    onClick = {
+                                        controller.requestBotDecision()
+                                    }
+                                ) {
+                                    Text("Player ${controller.getCurrentPlayer()}: Make Decision")
+                                }
+                            }
+                            uiState.currentBotDecision is BotDecision.Attack -> {
+                                Button(
+                                    onClick = {
+                                        controller.executeBotDecision()
+                                    }
+                                ) {
+                                    Text("Execute Attack")
+                                }
+                            }
+                            uiState.currentBotDecision is BotDecision.Skip -> {
+                                Button(
+                                    onClick = {
+                                        controller.executeBotDecision()
+                                    }
+                                ) {
+                                    Text("Skip Turn")
+                                }
+                            }
+                        }
+                    }
+                    // In Human vs Bot mode, bot turns execute automatically
                 }
             }
         }
@@ -194,8 +298,16 @@ fun BotVsBotGame(controller: GameController) {
             if (!controller.isGameOver()) {
                 val currentPlayerColor = if (controller.getCurrentPlayer() == 0)
                     GameColors.Player0 else GameColors.Player1
+
+                // Show "Your Turn" or "Bot's Turn" for human vs bot mode
+                val turnText = when {
+                    controller.isCurrentPlayerHuman() -> "YOUR TURN"
+                    isHumanVsBot -> "BOT'S TURN"
+                    else -> "Current Turn: Player ${controller.getCurrentPlayer()}"
+                }
+
                 Text(
-                    "Current Turn: Player ${controller.getCurrentPlayer()}",
+                    turnText,
                     style = MaterialTheme.typography.headlineSmall,
                     color = currentPlayerColor,
                     modifier = Modifier.padding(4.dp)
@@ -205,6 +317,16 @@ fun BotVsBotGame(controller: GameController) {
                     "Phase: ${gameState.gamePhase}",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(4.dp)
+                )
+            }
+
+            // Error message display
+            uiState.errorMessage?.let { error ->
+                Text(
+                    "❌ $error",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(8.dp)
                 )
             }
 
@@ -330,13 +452,24 @@ fun BotVsBotGame(controller: GameController) {
                 cellWidth = renderParams.cellWidth,
                 cellHeight = renderParams.cellHeight,
                 fontSize = renderParams.fontSize,
-                highlightedTerritories = when (val decision = uiState.currentBotDecision) {
-                    is BotDecision.Attack -> setOf(decision.fromTerritoryId, decision.toTerritoryId)
+                highlightedTerritories = when {
+                    uiState.currentBotDecision is BotDecision.Attack -> {
+                        val decision = uiState.currentBotDecision as BotDecision.Attack
+                        setOf(decision.fromTerritoryId, decision.toTerritoryId)
+                    }
+                    uiState.selectedTerritoryId != null -> {
+                        setOf(uiState.selectedTerritoryId!!)
+                    }
                     else -> emptySet()
                 },
                 attackFromTerritory = when (val decision = uiState.currentBotDecision) {
                     is BotDecision.Attack -> decision.fromTerritoryId
-                    else -> null
+                    else -> uiState.selectedTerritoryId
+                },
+                onTerritoryClick = if (controller.isCurrentPlayerHuman()) {
+                    { territoryId -> controller.selectTerritory(territoryId) }
+                } else {
+                    null
                 }
             )
         }
@@ -351,6 +484,7 @@ fun MapRenderer(
     fontSize: Float,
     highlightedTerritories: Set<Int> = emptySet(),
     attackFromTerritory: Int? = null,
+    onTerritoryClick: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -367,6 +501,26 @@ fun MapRenderer(
         modifier = modifier
             .width(mapWidth)
             .height(mapHeight)
+            .let { mod ->
+                if (onTerritoryClick != null) {
+                    mod.pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            val position = down.position
+                            val clickedTerritory = findTerritoryAtPosition(
+                                position.x,
+                                position.y,
+                                map,
+                                cellWidth,
+                                cellHeight
+                            )
+                            clickedTerritory?.let { onTerritoryClick(it) }
+                        }
+                    }
+                } else {
+                    mod
+                }
+            }
     ) {
         // First pass: Fill all cells with territory colors
         for (i in map.cells.indices) {
@@ -540,4 +694,79 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHexEdge(
         end = Offset(x2, y2),
         strokeWidth = strokeWidth
     )
+}
+
+/**
+ * Find which territory was clicked based on screen coordinates
+ */
+private fun findTerritoryAtPosition(
+    x: Float,
+    y: Float,
+    map: GameMap,
+    cellWidth: Float,
+    cellHeight: Float
+): Int? {
+    // Find which cell was clicked
+    val clickedCell = findCellAtPosition(x, y, cellWidth, cellHeight, map.gridWidth, map.gridHeight)
+        ?: return null
+
+    // Get the territory ID from the cell (1-based)
+    val territoryId = map.cells[clickedCell]
+    if (territoryId <= 0 || territoryId > map.territories.size) return null
+
+    // Return 0-based territory ID
+    return territoryId - 1
+}
+
+/**
+ * Find which cell (in hex grid) was clicked
+ */
+private fun findCellAtPosition(
+    x: Float,
+    y: Float,
+    cellWidth: Float,
+    cellHeight: Float,
+    gridWidth: Int,
+    gridHeight: Int
+): Int? {
+    // Rough estimation based on row and column
+    val estimatedRow = (y / cellHeight).toInt()
+    val estimatedCol = if (estimatedRow % 2 == 1) {
+        ((x - cellWidth / 2) / cellWidth).toInt()
+    } else {
+        (x / cellWidth).toInt()
+    }
+
+    // Check the estimated cell and its neighbors
+    val cellsToCheck = mutableListOf<Int>()
+
+    for (row in maxOf(0, estimatedRow - 1)..minOf(gridHeight - 1, estimatedRow + 1)) {
+        for (col in maxOf(0, estimatedCol - 1)..minOf(gridWidth - 1, estimatedCol + 1)) {
+            val cellIndex = row * gridWidth + col
+            cellsToCheck.add(cellIndex)
+        }
+    }
+
+    // Find the closest cell center
+    var closestCell: Int? = null
+    var closestDistance = Float.MAX_VALUE
+
+    for (cellIndex in cellsToCheck) {
+        if (cellIndex < 0 || cellIndex >= gridWidth * gridHeight) continue
+
+        val cellPos = HexGrid.getCellPosition(cellIndex, cellWidth, cellHeight)
+        val centerX = cellPos.first + cellWidth / 2
+        val centerY = cellPos.second + cellHeight / 2
+
+        val dx = x - centerX
+        val dy = y - centerY
+        val distance = dx * dx + dy * dy
+
+        if (distance < closestDistance) {
+            closestDistance = distance
+            closestCell = cellIndex
+        }
+    }
+
+    return closestCell
 }

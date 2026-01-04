@@ -39,7 +39,9 @@ data class GameUiState(
     val currentBotDecision: BotDecision? = null,
     val lastCombatResult: CombatResult? = null,
     val message: String? = null,
-    val isProcessing: Boolean = false
+    val isProcessing: Boolean = false,
+    val selectedTerritoryId: Int? = null,
+    val errorMessage: String? = null
 )
 
 /**
@@ -47,6 +49,8 @@ data class GameUiState(
  */
 class GameController(
     initialMap: GameMap,
+    private val gameMode: GameMode = GameMode.BOT_VS_BOT,
+    private val humanPlayerId: Int = 0,
     private val bot0: Bot = DefaultBot(initialMap.gameRandom),
     private val bot1: Bot = DefaultBot(initialMap.gameRandom),
     private val onStateChange: () -> Unit = {}
@@ -56,6 +60,20 @@ class GameController(
 
     val gameState: GameState get() = _gameState
     val uiState: GameUiState get() = _uiState
+
+    /**
+     * Check if the current player is human
+     */
+    fun isCurrentPlayerHuman(): Boolean {
+        return gameMode == GameMode.HUMAN_VS_BOT && _gameState.currentPlayerIndex == humanPlayerId
+    }
+
+    /**
+     * Check if the current player is a bot
+     */
+    fun isCurrentPlayerBot(): Boolean {
+        return gameMode == GameMode.BOT_VS_BOT || _gameState.currentPlayerIndex != humanPlayerId
+    }
 
     private fun notifyStateChanged() {
         onStateChange()
@@ -314,4 +332,96 @@ class GameController(
      * Get the current player index
      */
     fun getCurrentPlayer(): Int = _gameState.currentPlayerIndex
+
+    /**
+     * Human player selects a territory (for attack)
+     */
+    fun selectTerritory(territoryId: Int) {
+        if (!isCurrentPlayerHuman()) {
+            _uiState = _uiState.copy(errorMessage = "Not your turn!")
+            notifyStateChanged()
+            return
+        }
+
+        if (_gameState.gamePhase != GamePhase.ATTACK) {
+            _uiState = _uiState.copy(errorMessage = "Cannot attack during ${_gameState.gamePhase} phase")
+            notifyStateChanged()
+            return
+        }
+
+        val territory = _gameState.map.territories.getOrNull(territoryId)
+        if (territory == null) {
+            _uiState = _uiState.copy(errorMessage = "Invalid territory")
+            notifyStateChanged()
+            return
+        }
+
+        // If no territory is selected yet, select this one (if it's owned by human)
+        if (_uiState.selectedTerritoryId == null) {
+            if (territory.owner != humanPlayerId) {
+                _uiState = _uiState.copy(errorMessage = "You don't own this territory")
+                notifyStateChanged()
+                return
+            }
+
+            if (territory.armyCount <= 1) {
+                _uiState = _uiState.copy(errorMessage = "Territory must have more than 1 army to attack")
+                notifyStateChanged()
+                return
+            }
+
+            _uiState = _uiState.copy(
+                selectedTerritoryId = territoryId,
+                errorMessage = null,
+                message = "Territory $territoryId selected. Now select an adjacent enemy territory to attack."
+            )
+            notifyStateChanged()
+        } else {
+            // A territory is already selected, so this is the target
+            val fromTerritoryId = _uiState.selectedTerritoryId!!
+            val fromTerritory = _gameState.map.territories[fromTerritoryId]
+
+            // Validate the attack
+            if (territory.owner == humanPlayerId) {
+                _uiState = _uiState.copy(errorMessage = "Cannot attack your own territory")
+                notifyStateChanged()
+                return
+            }
+
+            if (!fromTerritory.adjacentTerritories[territoryId]) {
+                _uiState = _uiState.copy(errorMessage = "Territories are not adjacent")
+                notifyStateChanged()
+                return
+            }
+
+            // Execute the attack
+            executeHumanAttack(fromTerritoryId, territoryId)
+        }
+    }
+
+    /**
+     * Execute a human player's attack
+     */
+    private fun executeHumanAttack(fromTerritoryId: Int, toTerritoryId: Int) {
+        // Clear selection
+        _uiState = _uiState.copy(
+            selectedTerritoryId = null,
+            errorMessage = null
+        )
+
+        // Execute the attack using the existing attack logic
+        executeAttack(fromTerritoryId, toTerritoryId)
+    }
+
+    /**
+     * Cancel the current territory selection
+     */
+    fun cancelSelection() {
+        _uiState = _uiState.copy(
+            selectedTerritoryId = null,
+            errorMessage = null,
+            message = "Selection cancelled"
+        )
+        notifyStateChanged()
+    }
 }
