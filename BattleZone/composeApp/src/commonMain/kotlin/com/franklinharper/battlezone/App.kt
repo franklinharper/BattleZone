@@ -187,6 +187,18 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
 
     val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
 
+    // Create a stable click handler
+    val territoryClickHandler = remember(gameMode) {
+        if (gameMode == GameMode.HUMAN_VS_BOT) {
+            { territoryId: Int ->
+                println("Territory clicked: $territoryId, Current player: ${controller.getCurrentPlayer()}, Is human turn: ${controller.isCurrentPlayerHuman()}")
+                controller.selectTerritory(territoryId)
+            }
+        } else {
+            null
+        }
+    }
+
     Column(
         modifier = Modifier
             .background(MaterialTheme.colorScheme.background)
@@ -380,8 +392,9 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
         ) {
             // Player 0 stats
             Column(horizontalAlignment = Alignment.Start) {
+                val player0Label = if (isHumanVsBot) "Human (Purple)" else "Player 0 (Purple)"
                 Text(
-                    "Player 0 (Purple)",
+                    player0Label,
                     style = MaterialTheme.typography.bodyLarge,
                     color = GameColors.Player0
                 )
@@ -408,8 +421,9 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
 
             // Player 1 stats
             Column(horizontalAlignment = Alignment.Start) {
+                val player1Label = if (isHumanVsBot) "Bot (Green)" else "Player 1 (Green)"
                 Text(
-                    "Player 1 (Green)",
+                    player1Label,
                     style = MaterialTheme.typography.bodyLarge,
                     color = GameColors.Player1
                 )
@@ -466,11 +480,7 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
                     is BotDecision.Attack -> decision.fromTerritoryId
                     else -> uiState.selectedTerritoryId
                 },
-                onTerritoryClick = if (controller.isCurrentPlayerHuman()) {
-                    { territoryId -> controller.selectTerritory(territoryId) }
-                } else {
-                    null
-                }
+                onTerritoryClick = territoryClickHandler
             )
         }
     }
@@ -497,31 +507,31 @@ fun MapRenderer(
         (HexGrid.GRID_HEIGHT * cellHeight).toDp()
     }
 
-    Canvas(
-        modifier = modifier
-            .width(mapWidth)
-            .height(mapHeight)
-            .let { mod ->
-                if (onTerritoryClick != null) {
-                    mod.pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            val position = down.position
-                            val clickedTerritory = findTerritoryAtPosition(
-                                position.x,
-                                position.y,
-                                map,
-                                cellWidth,
-                                cellHeight
-                            )
-                            clickedTerritory?.let { onTerritoryClick(it) }
-                        }
+    val canvasModifier = modifier
+        .width(mapWidth)
+        .height(mapHeight)
+        .then(
+            if (onTerritoryClick != null) {
+                Modifier.pointerInput(cellWidth, cellHeight) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        val position = down.position
+                        val clickedTerritory = findTerritoryAtPosition(
+                            position.x,
+                            position.y,
+                            map,
+                            cellWidth,
+                            cellHeight
+                        )
+                        clickedTerritory?.let { onTerritoryClick(it) }
                     }
-                } else {
-                    mod
                 }
+            } else {
+                Modifier
             }
-    ) {
+        )
+
+    Canvas(modifier = canvasModifier) {
         // First pass: Fill all cells with territory colors
         for (i in map.cells.indices) {
             val territoryId = map.cells[i]
