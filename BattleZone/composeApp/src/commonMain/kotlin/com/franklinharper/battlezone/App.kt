@@ -245,22 +245,13 @@ fun GameScreen(controller: GameController, gameMode: GameMode, onBackToMenu: () 
                     }
                 }
                 controller.isCurrentPlayerHuman() -> {
-                    // Human player's turn - show Skip button and cancel selection
+                    // Human player's turn - show Skip button
                     Button(
                         onClick = {
                             controller.skipTurn()
                         }
                     ) {
                         Text("Skip Turn")
-                    }
-                    if (uiState.selectedTerritoryId != null) {
-                        Button(
-                            onClick = {
-                                controller.cancelSelection()
-                            }
-                        ) {
-                            Text("Cancel")
-                        }
                     }
                 }
                 controller.isCurrentPlayerBot() -> {
@@ -625,7 +616,7 @@ fun MapRenderer(
             if (territory.size == 0) continue
 
             val centerPos = HexGrid.getCellPosition(territory.centerPos, cellWidth, cellHeight)
-            val displayText = "${territory.armyCount} (${territory.id})"
+            val displayText = "${territory.armyCount}"
 
             val textLayoutResult = textMeasurer.measure(
                 text = displayText,

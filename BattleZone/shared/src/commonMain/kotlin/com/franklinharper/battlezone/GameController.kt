@@ -388,8 +388,20 @@ class GameController(
             )
             notifyStateChanged()
         } else {
-            // A territory is already selected, so this is the target
+            // A territory is already selected
             val fromTerritoryId = _uiState.selectedTerritoryId!!
+
+            // If clicking the same territory again, cancel the selection
+            if (territoryId == fromTerritoryId) {
+                _uiState = _uiState.copy(
+                    selectedTerritoryId = null,
+                    errorMessage = null,
+                    message = "Selection cancelled"
+                )
+                notifyStateChanged()
+                return
+            }
+
             val fromTerritory = _gameState.map.territories[fromTerritoryId]
 
             // Validate the attack
