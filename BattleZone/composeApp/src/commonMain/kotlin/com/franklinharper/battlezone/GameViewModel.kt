@@ -1,9 +1,5 @@
 package com.franklinharper.battlezone
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -16,31 +12,10 @@ class GameViewModel(
     gameMode: GameMode = GameMode.BOT_VS_BOT,
     humanPlayerId: Int = 0
 ) {
-    // Coroutine scope for animations
-    private val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
-    /** Animation coordinator for visual feedback */
-    val animationCoordinator = AnimationCoordinator(viewModelScope)
-
     private val controller = GameController(
         initialMap = initialMap,
         gameMode = gameMode,
-        humanPlayerId = humanPlayerId,
-        onAttackAnimation = { attackInfo ->
-            // Generate unique ID for this animation
-            val animationId = "${System.currentTimeMillis()}-${attackInfo.fromTerritoryId}-${attackInfo.toTerritoryId}"
-
-            // Start attack animation
-            animationCoordinator.startAnimation(
-                Animation.AttackAnimation(
-                    id = animationId,
-                    startTime = System.currentTimeMillis(),
-                    fromTerritoryId = attackInfo.fromTerritoryId,
-                    toTerritoryId = attackInfo.toTerritoryId,
-                    attackerWins = attackInfo.attackerWins
-                )
-            )
-        }
+        humanPlayerId = humanPlayerId
     )
 
     /** Observable game state */
@@ -96,10 +71,4 @@ class GameViewModel(
 
     /** Check if redo is available */
     fun canRedo(): Boolean = controller.canRedo()
-
-    /** Dispose of ViewModel resources */
-    fun dispose() {
-        animationCoordinator.dispose()
-        viewModelScope.cancel()
-    }
 }

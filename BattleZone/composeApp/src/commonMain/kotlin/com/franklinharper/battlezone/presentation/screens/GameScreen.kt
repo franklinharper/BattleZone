@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.franklinharper.battlezone.*
-import com.franklinharper.battlezone.presentation.components.AnimationOverlay
+import com.franklinharper.battlezone.presentation.components.BotAttackArrowOverlay
 import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
 
@@ -26,7 +26,6 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     // Collect state from StateFlows
     val gameState by viewModel.gameState.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-    val animationState by viewModel.animationCoordinator.animationState.collectAsState()
 
     val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
 
@@ -275,14 +274,16 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     onTerritoryClick = territoryClickHandler
                 )
 
-                // Animation overlay (does not block clicks)
-                AnimationOverlay(
-                    animations = animationState.activeAnimations.values.toList(),
-                    gameState = gameState,
-                    cellWidth = renderParams.cellWidth,
-                    cellHeight = renderParams.cellHeight,
-                    modifier = Modifier.matchParentSize()
-                )
+                // Bot attack arrow overlay (does not block clicks)
+                uiState.botAttackArrow?.let { arrow ->
+                    BotAttackArrowOverlay(
+                        arrow = arrow,
+                        gameMap = gameState.map,
+                        cellWidth = renderParams.cellWidth,
+                        cellHeight = renderParams.cellHeight,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
             }
         }
     }

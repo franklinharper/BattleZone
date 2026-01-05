@@ -40,6 +40,15 @@ data class CombatResult(
 }
 
 /**
+ * Bot attack arrow display information
+ */
+data class BotAttackArrow(
+    val fromTerritoryId: Int,
+    val toTerritoryId: Int,
+    val attackSucceeded: Boolean
+)
+
+/**
  * UI state for displaying the game
  */
 data class GameUiState(
@@ -48,16 +57,8 @@ data class GameUiState(
     val message: String? = null,
     val isProcessing: Boolean = false,
     val selectedTerritoryId: Int? = null,
-    val errorMessage: String? = null
-)
-
-/**
- * Callback for attack animations
- */
-data class AttackAnimationInfo(
-    val fromTerritoryId: Int,
-    val toTerritoryId: Int,
-    val attackerWins: Boolean
+    val errorMessage: String? = null,
+    val botAttackArrow: BotAttackArrow? = null
 )
 
 /**
@@ -68,8 +69,7 @@ class GameController(
     private val gameMode: GameMode = GameMode.BOT_VS_BOT,
     private val humanPlayerId: Int = 0,
     private val bot0: Bot = DefaultBot(initialMap.gameRandom),
-    private val bot1: Bot = DefaultBot(initialMap.gameRandom),
-    private val onAttackAnimation: ((AttackAnimationInfo) -> Unit)? = null
+    private val bot1: Bot = DefaultBot(initialMap.gameRandom)
 ) {
     private val _gameState = MutableStateFlow(createInitialGameState(initialMap))
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -187,14 +187,8 @@ class GameController(
         val defenderTotal = defenderRoll.sum()
         val attackerWins = attackerTotal > defenderTotal
 
-        // Trigger attack animation (non-blocking, purely visual)
-        onAttackAnimation?.invoke(
-            AttackAnimationInfo(
-                fromTerritoryId = fromTerritoryId,
-                toTerritoryId = toTerritoryId,
-                attackerWins = attackerWins
-            )
-        )
+        // Determine if this is a bot attack
+        val isBotAttack = isCurrentPlayerBot()
 
         // Store combat result for UI
         val combatResult = CombatResult(
@@ -217,7 +211,12 @@ class GameController(
                 lastCombatResult = combatResult,
                 message = "${getPlayerLabel(currentGameState.currentPlayerIndex)} wins! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
-                        "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal"
+                        "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
+                botAttackArrow = if (isBotAttack) {
+                    BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
+                } else {
+                    null  // Human attack - clear bot arrow
+                }
             )
         } else {
             // Defender wins: attacker loses all armies except 1
@@ -227,7 +226,12 @@ class GameController(
                 lastCombatResult = combatResult,
                 message = "${getPlayerLabel(toTerritory.owner)} defends! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
-                        "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal"
+                        "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
+                botAttackArrow = if (isBotAttack) {
+                    BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
+                } else {
+                    null  // Human attack - clear bot arrow
+                }
             )
         }
 
@@ -272,10 +276,12 @@ class GameController(
      */
     fun skipTurn() {
         val newConsecutiveSkips = _gameState.value.consecutiveSkips + 1
+        val isBotSkip = isCurrentPlayerBot()
 
         _uiState.value = _uiState.value.copy(
             message = "${getPlayerLabel(_gameState.value.currentPlayerIndex)} skipped. " +
-                    "Consecutive skips: $newConsecutiveSkips"
+                    "Consecutive skips: $newConsecutiveSkips",
+            botAttackArrow = if (isBotSkip) null else _uiState.value.botAttackArrow
         )
 
         _gameState.value = _gameState.value.copy(consecutiveSkips = newConsecutiveSkips)
