@@ -4,11 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import com.franklinharper.battlezone.presentation.screens.GameScreen
 import com.franklinharper.battlezone.presentation.screens.ModeSelectionScreen
+import kotlinx.coroutines.flow.collectLatest
 import org.jetbrains.compose.ui.tooling.preview.Preview
-
-// Constants for bot turn delays (in milliseconds)
-private const val BOT_DECISION_DELAY = 800L
-private const val BOT_EXECUTION_DELAY = 1200L
 
 /**
  * Main application entry point
@@ -39,19 +36,27 @@ fun App() {
                 val gameState by vm.gameState.collectAsState()
                 val uiState by vm.uiState.collectAsState()
 
-                // Auto-execute bot turns in Human vs Bot mode
-                LaunchedEffect(vm.isCurrentPlayerBot(), uiState.currentBotDecision) {
-                    if (gameMode == GameMode.HUMAN_VS_BOT && vm.isCurrentPlayerBot()) {
-                        if (gameState.gamePhase == GamePhase.ATTACK) {
-                            if (uiState.currentBotDecision == null) {
-                                // Small delay so user can see turn change
-                                kotlinx.coroutines.delay(BOT_DECISION_DELAY)
-                                vm.requestBotDecision()
-                            } else {
-                                // Small delay so user can see the highlighted attack
-                                kotlinx.coroutines.delay(BOT_EXECUTION_DELAY)
-                                vm.executeBotDecision()
-                            }
+                // Turn coordinator for bot moves
+                val scope = rememberCoroutineScope()
+                val turnCoordinator = remember { TurnCoordinator(scope) }
+
+                // Coordinate bot turns using proper state machine
+                LaunchedEffect(vm.isCurrentPlayerBot(), gameState.gamePhase, uiState.currentBotDecision) {
+                    turnCoordinator.coordinateTurn(
+                        gameMode = gameMode!!,
+                        isCurrentPlayerBot = vm.isCurrentPlayerBot(),
+                        gamePhase = gameState.gamePhase,
+                        hasBotDecision = uiState.currentBotDecision != null
+                    )
+                }
+
+                // Handle turn actions from coordinator
+                LaunchedEffect(Unit) {
+                    turnCoordinator.actions.collectLatest { action ->
+                        when (action) {
+                            TurnAction.RequestBotDecision -> vm.requestBotDecision()
+                            TurnAction.ExecuteBotDecision -> vm.executeBotDecision()
+                            TurnAction.ExecuteReinforcement -> vm.executeReinforcementPhase()
                         }
                     }
                 }
