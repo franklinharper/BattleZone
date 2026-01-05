@@ -21,8 +21,8 @@ import kotlin.math.PI
 object AttackAnimationColors {
     val ATTACKING_OUTLINE = Color(0xFFFFD700) // Gold/Yellow
     val DEFENDING_OUTLINE = Color(0xFFFF3333) // Bright Red
-    val SUCCESS_FLASH = Color(0xFFFF0000)     // Pure Red
-    val FAILURE_FLASH = Color(0xFF4444FF)     // Bright Blue
+    val SUCCESS_FLASH = Color(0xFFFF0000)     // Pure Red (success)
+    val FAILURE_FLASH = Color(0xFF4444FF)     // Bright Blue (failure)
 }
 
 /**
@@ -116,31 +116,38 @@ private fun DrawScope.drawAttackAnimation(
         AnimationPhase.FLASH -> {
             val progress = animation.getFlashProgress(currentTime)
 
-            // Flash overlay on defending territory (solid color, fades out at end)
-            val flashColor = if (animation.attackerWins) {
-                // Red flash for success - fade out in last 20% of animation
-                if (progress < 0.8f) {
-                    AttackAnimationColors.SUCCESS_FLASH
-                } else {
-                    val fadeProgress = (progress - 0.8f) / 0.2f
-                    AttackAnimationColors.SUCCESS_FLASH.copy(alpha = 1f - fadeProgress)
-                }
+            // Determine flash color and territory based on attack result
+            val (baseColor, flashTerritoryId) = if (animation.attackerWins) {
+                // Success: Flash defending territory red
+                AttackAnimationColors.SUCCESS_FLASH to animation.toTerritoryId
             } else {
-                // Blue flash for failure - fade out in last 20% of animation
-                if (progress < 0.8f) {
-                    AttackAnimationColors.FAILURE_FLASH
-                } else {
-                    val fadeProgress = (progress - 0.8f) / 0.2f
-                    AttackAnimationColors.FAILURE_FLASH.copy(alpha = 1f - fadeProgress)
-                }
+                // Failure: Flash attacking territory blue
+                AttackAnimationColors.FAILURE_FLASH to animation.fromTerritoryId
             }
 
-            val defendingTerritory = gameState.map.territories.getOrNull(animation.toTerritoryId)
-            if (defendingTerritory != null && defendingTerritory.size > 0) {
+            // Calculate flash color with fade out in last 20%
+            val flashColor = if (progress < 0.8f) {
+                baseColor
+            } else {
+                val fadeProgress = (progress - 0.8f) / 0.2f
+                baseColor.copy(alpha = 1f - fadeProgress)
+            }
+
+            val flashTerritory = gameState.map.territories.getOrNull(flashTerritoryId)
+            if (flashTerritory != null && flashTerritory.size > 0) {
+                // Draw flash overlay
                 drawTerritoryFill(
-                    territory = defendingTerritory,
+                    territory = flashTerritory,
                     map = gameState.map,
                     color = flashColor,
+                    cellWidth = cellWidth,
+                    cellHeight = cellHeight
+                )
+
+                // Redraw borders on top of flash to keep them visible
+                drawTerritoryBorders(
+                    territory = flashTerritory,
+                    map = gameState.map,
                     cellWidth = cellWidth,
                     cellHeight = cellHeight
                 )
@@ -214,6 +221,46 @@ private fun DrawScope.drawTerritoryFill(
                 path = hexPath,
                 color = color
             )
+        }
+    }
+}
+
+/**
+ * Draw borders for a territory to keep them visible on top of flash overlays
+ */
+private fun DrawScope.drawTerritoryBorders(
+    territory: Territory,
+    map: GameMap,
+    cellWidth: Float,
+    cellHeight: Float
+) {
+    // Draw borders for each cell in the territory
+    for (cellIdx in map.cells.indices) {
+        if (map.cells[cellIdx] == territory.id + 1) { // cells use 1-based IDs
+            val (cellX, cellY) = HexGrid.getCellPosition(cellIdx, cellWidth, cellHeight)
+            val neighbors = map.cellNeighbors[cellIdx].directions
+
+            // Draw edges that border different territories (borders)
+            for (dir in neighbors.indices) {
+                val neighborCell = neighbors[dir]
+                val neighborTerritoryId = if (neighborCell != -1) map.cells[neighborCell] else -1
+
+                // Draw edge if it's a boundary
+                if (neighborTerritoryId != territory.id + 1) {
+                    val edgePoints = HexGeometry.getHexEdgePoints(
+                        cellX, cellY, cellWidth, cellHeight, dir
+                    )
+                    if (edgePoints != null) {
+                        val (start, end) = edgePoints
+                        drawLine(
+                            color = GameColors.TerritoryBorder,
+                            start = Offset(start.first, start.second),
+                            end = Offset(end.first, end.second),
+                            strokeWidth = kotlin.math.max(1f, 3f * (cellWidth / 27f))
+                        )
+                    }
+                }
+            }
         }
     }
 }
