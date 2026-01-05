@@ -14,6 +14,8 @@ Write idiomatic Kotlin code, and prefer a functional style where it makes sense.
 
 Ask before commiting to  git.
 
+Use symbolic constants instead of magic numbers. Especially for colors.
+
 ## Architecture
 
 The **Kotlin Multiplatform (KMP)** project is located in `/BattleZone/` and has three main modules:
