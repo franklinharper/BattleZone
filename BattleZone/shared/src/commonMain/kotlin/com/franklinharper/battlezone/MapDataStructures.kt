@@ -145,7 +145,8 @@ data class GameState(
     val players: Array<PlayerState>,
     val currentPlayerIndex: Int,
     val gamePhase: GamePhase,
-    val consecutiveSkips: Int,
+    val eliminatedPlayers: Set<Int> = emptySet(),
+    val skipTracker: Map<Int, Boolean> = emptyMap(),
     val winner: Int? = null,
     val turnHistory: List<Turn> = emptyList()
 ) {
@@ -158,7 +159,8 @@ data class GameState(
                 players.contentEquals(other.players) &&
                 currentPlayerIndex == other.currentPlayerIndex &&
                 gamePhase == other.gamePhase &&
-                consecutiveSkips == other.consecutiveSkips &&
+                eliminatedPlayers == other.eliminatedPlayers &&
+                skipTracker == other.skipTracker &&
                 winner == other.winner &&
                 turnHistory == other.turnHistory
     }
@@ -168,7 +170,8 @@ data class GameState(
         result = 31 * result + players.contentHashCode()
         result = 31 * result + currentPlayerIndex
         result = 31 * result + gamePhase.hashCode()
-        result = 31 * result + consecutiveSkips
+        result = 31 * result + eliminatedPlayers.hashCode()
+        result = 31 * result + skipTracker.hashCode()
         result = 31 * result + (winner ?: 0)
         result = 31 * result + turnHistory.hashCode()
         return result
@@ -185,6 +188,14 @@ enum class GameMode {
     HUMAN_VS_BOT,
     BOT_VS_BOT
 }
+
+/**
+ * Game configuration combining mode and player count
+ */
+data class GameConfig(
+    val gameMode: GameMode,
+    val playerCount: Int
+)
 
 /**
  * Represents a single turn action

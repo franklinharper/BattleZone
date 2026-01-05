@@ -58,7 +58,7 @@ data class GameUiState(
     val isProcessing: Boolean = false,
     val selectedTerritoryId: Int? = null,
     val errorMessage: String? = null,
-    val botAttackArrow: BotAttackArrow? = null
+    val botAttackArrows: List<BotAttackArrow> = emptyList()
 )
 
 /**
@@ -68,8 +68,7 @@ class GameController(
     initialMap: GameMap,
     private val gameMode: GameMode = GameMode.BOT_VS_BOT,
     private val humanPlayerId: Int = 0,
-    private val bot0: Bot = DefaultBot(initialMap.gameRandom),
-    private val bot1: Bot = DefaultBot(initialMap.gameRandom)
+    private val bots: Array<Bot>
 ) {
     private val _gameState = MutableStateFlow(createInitialGameState(initialMap))
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -117,15 +116,19 @@ class GameController(
             playerState
         }
 
-        // Randomly choose starting player
-        val startingPlayer = map.gameRandom.nextInt(2)
+        // Choose starting player based on game mode
+        val startingPlayer = when (gameMode) {
+            GameMode.HUMAN_VS_BOT -> 0  // Human always starts
+            GameMode.BOT_VS_BOT -> map.gameRandom.nextInt(map.playerCount)
+        }
 
         return GameState(
             map = map,
             players = players,
             currentPlayerIndex = startingPlayer,
             gamePhase = GamePhase.ATTACK,
-            consecutiveSkips = 0,
+            eliminatedPlayers = emptySet(),
+            skipTracker = emptyMap(),
             winner = null
         )
     }
@@ -138,7 +141,12 @@ class GameController(
         if (_gameState.value.winner != null) return
 
         val currentPlayer = _gameState.value.currentPlayerIndex
-        val bot = if (currentPlayer == 0) bot0 else bot1
+        val botIndex = if (gameMode == GameMode.HUMAN_VS_BOT) {
+            currentPlayer - 1  // bots[0] is player 1
+        } else {
+            currentPlayer  // bots array matches player indices
+        }
+        val bot = bots[botIndex]
         val decision = bot.decide(_gameState.value.map, currentPlayer)
 
         _uiState.value = _uiState.value.copy(
@@ -212,10 +220,11 @@ class GameController(
                 message = "${getPlayerLabel(currentGameState.currentPlayerIndex)} wins! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
                         "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
-                botAttackArrow = if (isBotAttack) {
-                    BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
+                botAttackArrows = if (isBotAttack) {
+                    // Add this bot's attack arrow to the list
+                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
                 } else {
-                    null  // Human attack - clear bot arrow
+                    emptyList()  // Human attack - clear all bot arrows
                 }
             )
         } else {
@@ -227,67 +236,104 @@ class GameController(
                 message = "${getPlayerLabel(toTerritory.owner)} defends! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
                         "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
-                botAttackArrow = if (isBotAttack) {
-                    BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
+                botAttackArrows = if (isBotAttack) {
+                    // Add this bot's attack arrow to the list
+                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
                 } else {
-                    null  // Human attack - clear bot arrow
+                    emptyList()  // Human attack - clear all bot arrows
                 }
             )
         }
 
-        // Update player states
-        GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[0], 0)
-        GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[1], 1)
+        // Update all player states
+        for (playerId in 0 until currentGameState.map.playerCount) {
+            GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[playerId], playerId)
+        }
 
         // Create new PlayerState copies with updated values
-        val updatedPlayers = arrayOf(
-            currentGameState.players[0].copy(),
-            currentGameState.players[1].copy()
-        )
-
-        // Check for victory
-        val currentPlayer = currentGameState.currentPlayerIndex
-        val allTerritoriesOwned = currentGameState.map.territories.all { territory ->
-            territory.size == 0 || territory.owner == currentPlayer
+        val updatedPlayers = Array(currentGameState.map.playerCount) { playerId ->
+            currentGameState.players[playerId].copy()
         }
 
-        if (allTerritoriesOwned) {
+        // Check if defender is eliminated
+        var eliminatedPlayers = currentGameState.eliminatedPlayers
+        if (updatedPlayers[toTerritory.owner].territoryCount == 0) {
+            eliminatedPlayers = eliminatedPlayers + toTerritory.owner
+        }
+
+        // Check game end conditions
+        val currentPlayer = currentGameState.currentPlayerIndex
+
+        // Human eliminated → human loses immediately
+        if (gameMode == GameMode.HUMAN_VS_BOT && humanPlayerId in eliminatedPlayers) {
             _gameState.value = _gameState.value.copy(
-                winner = currentPlayer,
                 gamePhase = GamePhase.GAME_OVER,
-                players = updatedPlayers
+                winner = null,
+                players = updatedPlayers,
+                eliminatedPlayers = eliminatedPlayers
             )
             _uiState.value = _uiState.value.copy(
-                message = "🎉 ${getPlayerLabel(currentPlayer)} wins the game! 🎉"
+                message = "💀 Human eliminated! Game Over."
             )
-        } else {
-            // Update state with new players, reset skips, and advance to next player
-            val nextPlayerIndex = (currentGameState.currentPlayerIndex + 1) % currentGameState.map.playerCount
-            _gameState.value = _gameState.value.copy(
-                consecutiveSkips = 0,
-                currentPlayerIndex = nextPlayerIndex,
-                players = updatedPlayers
-            )
+            return
         }
+
+        // Count remaining players
+        val remainingPlayers = (0 until currentGameState.map.playerCount).filter { it !in eliminatedPlayers }
+        if (remainingPlayers.size == 1) {
+            val winner = remainingPlayers[0]
+            _gameState.value = _gameState.value.copy(
+                winner = winner,
+                gamePhase = GamePhase.GAME_OVER,
+                players = updatedPlayers,
+                eliminatedPlayers = eliminatedPlayers
+            )
+            _uiState.value = _uiState.value.copy(
+                message = "🎉 ${getPlayerLabel(winner)} wins the game! 🎉"
+            )
+            return
+        }
+
+        // Update state: reset skip tracker and advance to next player
+        _gameState.value = _gameState.value.copy(
+            skipTracker = emptyMap(),  // Reset skip tracker after attack
+            eliminatedPlayers = eliminatedPlayers,
+            players = updatedPlayers
+        )
+
+        nextPlayer()
     }
 
     /**
      * Skip the current player's turn
      */
     fun skipTurn() {
-        val newConsecutiveSkips = _gameState.value.consecutiveSkips + 1
+        val currentState = _gameState.value
+        val currentPlayer = currentState.currentPlayerIndex
         val isBotSkip = isCurrentPlayerBot()
 
+        // Mark current player as skipped
+        val updatedSkipTracker = currentState.skipTracker + (currentPlayer to true)
+
+        // Check if all non-eliminated players have skipped
+        val activePlayerCount = currentState.map.playerCount - currentState.eliminatedPlayers.size
+        val skipCount = (0 until currentState.map.playerCount)
+            .filter { it !in currentState.eliminatedPlayers }
+            .count { updatedSkipTracker[it] == true }
+
         _uiState.value = _uiState.value.copy(
-            message = "${getPlayerLabel(_gameState.value.currentPlayerIndex)} skipped. " +
-                    "Consecutive skips: $newConsecutiveSkips",
-            botAttackArrow = if (isBotSkip) null else _uiState.value.botAttackArrow
+            message = "${getPlayerLabel(currentPlayer)} skipped. ($skipCount/$activePlayerCount players skipped)",
+            botAttackArrows = if (isCurrentPlayerHuman()) {
+                emptyList()  // Human skip - clear bot arrows from previous round
+            } else {
+                _uiState.value.botAttackArrows  // Bot skip - keep existing arrows
+            }
         )
 
-        _gameState.value = _gameState.value.copy(consecutiveSkips = newConsecutiveSkips)
+        _gameState.value = currentState.copy(skipTracker = updatedSkipTracker)
 
-        // Check if both players have skipped consecutively
-        if (newConsecutiveSkips >= 2) {
+        // Check if all active players have skipped → reinforcement phase
+        if (skipCount >= activePlayerCount) {
             startReinforcementPhase()
         } else {
             nextPlayer()
@@ -295,11 +341,17 @@ class GameController(
     }
 
     /**
-     * Switch to the next player
+     * Switch to the next player (skip eliminated players)
      */
     private fun nextPlayer() {
         val currentState = _gameState.value
-        val nextPlayerIndex = (currentState.currentPlayerIndex + 1) % currentState.map.playerCount
+        var nextPlayerIndex = (currentState.currentPlayerIndex + 1) % currentState.map.playerCount
+
+        // Skip eliminated players
+        while (nextPlayerIndex in currentState.eliminatedPlayers) {
+            nextPlayerIndex = (nextPlayerIndex + 1) % currentState.map.playerCount
+        }
+
         _gameState.value = currentState.copy(currentPlayerIndex = nextPlayerIndex)
     }
 
@@ -330,12 +382,13 @@ class GameController(
     private fun startReinforcementPhase() {
         _gameState.value = _gameState.value.copy(gamePhase = GamePhase.REINFORCEMENT)
         _uiState.value = _uiState.value.copy(
-            message = "Reinforcement Phase: Both players skipped. Distributing reinforcements..."
+            message = "Reinforcement Phase: All players skipped. Distributing reinforcements...",
+            botAttackArrows = emptyList()  // Clear bot attack arrows for new round
         )
     }
 
     /**
-     * Execute the reinforcement phase for both players
+     * Execute the reinforcement phase for all players
      */
     fun executeReinforcementPhase() {
         val currentState = _gameState.value
@@ -343,8 +396,11 @@ class GameController(
 
         val messages = mutableListOf<String>()
 
-        // Reinforce both players
+        // Reinforce all non-eliminated players
         for (playerId in 0 until currentState.map.playerCount) {
+            // Skip eliminated players
+            if (playerId in currentState.eliminatedPlayers) continue
+
             val playerState = currentState.players[playerId]
             val reinforcements = GameLogic.calculateReinforcements(currentState.map, playerId)
 
@@ -366,14 +422,13 @@ class GameController(
             message = "Reinforcements: ${messages.joinToString(" | ")}"
         )
 
-        // Return to attack phase with new PlayerState copies so UI sees the changes
+        // Return to attack phase with new PlayerState copies and reset skip tracker
         _gameState.value = currentState.copy(
             gamePhase = GamePhase.ATTACK,
-            consecutiveSkips = 0,
-            players = arrayOf(
-                currentState.players[0].copy(),
-                currentState.players[1].copy()
-            )
+            skipTracker = emptyMap(),  // Reset skip tracker for new round
+            players = Array(currentState.map.playerCount) { playerId ->
+                currentState.players[playerId].copy()
+            }
         )
     }
 

@@ -37,11 +37,7 @@ object TerritoryDrawer {
                 val territory = map.territories[territoryId - 1]
                 val (cellX, cellY) = getCellPosition(i)
 
-                val fillColor = when (territory.owner) {
-                    0 -> GameColors.Player0
-                    1 -> GameColors.Player1
-                    else -> Color.Gray
-                }
+                val fillColor = GameColors.getPlayerColor(territory.owner)
 
                 val hexPath = buildHexagonPath(cellX, cellY, cellWidth, cellHeight)
                 drawPath(

@@ -141,14 +141,14 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
         ) {
             // Current turn indicator
             if (!viewModel.isGameOver()) {
-                val currentPlayerColor = if (viewModel.getCurrentPlayer() == 0)
-                    GameColors.Player0 else GameColors.Player1
+                // Show turn indicator
+                val currentPlayer = viewModel.getCurrentPlayer()
+                val currentPlayerColor = GameColors.getPlayerColor(currentPlayer)
 
-                // Show "Your Turn" or "Bot's Turn" for human vs bot mode
                 val turnText = when {
                     viewModel.isCurrentPlayerHuman() -> "YOUR TURN"
-                    isHumanVsBot -> "BOT'S TURN"
-                    else -> "Current Turn: Player ${viewModel.getCurrentPlayer()}"
+                    isHumanVsBot -> "BOT $currentPlayer'S TURN"
+                    else -> "BOT ${currentPlayer + 1}'S TURN"
                 }
 
                 Text(
@@ -218,24 +218,29 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             }
         }
 
-        // Player stats
-        Row(
-            horizontalArrangement = Arrangement.SpaceEvenly,
+        // Player stats - show all players
+        Column(
             modifier = Modifier.fillMaxWidth().padding(8.dp)
         ) {
-            PlayerStatsDisplay(
-                playerIndex = 0,
-                playerState = gameState.players[0],
-                label = if (isHumanVsBot) "Human (Purple)" else "Player 0 (Purple)",
-                color = GameColors.Player0
-            )
+            for (playerId in 0 until gameState.map.playerCount) {
+                val playerState = gameState.players[playerId]
+                val isEliminated = playerId in gameState.eliminatedPlayers
+                val isCurrentPlayer = playerId == gameState.currentPlayerIndex
 
-            PlayerStatsDisplay(
-                playerIndex = 1,
-                playerState = gameState.players[1],
-                label = if (isHumanVsBot) "Bot (Green)" else "Player 1 (Green)",
-                color = GameColors.Player1
-            )
+                val label = when (gameMode) {
+                    GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
+                    GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
+                }
+
+                PlayerStatsDisplay(
+                    playerIndex = playerId,
+                    playerState = playerState,
+                    label = label,
+                    color = GameColors.getPlayerColor(playerId),
+                    isEliminated = isEliminated,
+                    isCurrentPlayer = isCurrentPlayer
+                )
+            }
         }
 
         // Map rendering with animation overlay
@@ -274,8 +279,8 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     onTerritoryClick = territoryClickHandler
                 )
 
-                // Bot attack arrow overlay (does not block clicks)
-                uiState.botAttackArrow?.let { arrow ->
+                // Bot attack arrows overlay (does not block clicks) - show all bot attacks
+                uiState.botAttackArrows.forEach { arrow ->
                     BotAttackArrowOverlay(
                         arrow = arrow,
                         gameMap = gameState.map,

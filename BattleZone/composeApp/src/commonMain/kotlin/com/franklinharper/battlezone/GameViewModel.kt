@@ -10,12 +10,14 @@ import kotlinx.coroutines.flow.StateFlow
 class GameViewModel(
     initialMap: GameMap,
     gameMode: GameMode = GameMode.BOT_VS_BOT,
-    humanPlayerId: Int = 0
+    humanPlayerId: Int = 0,
+    bots: Array<Bot>
 ) {
     private val controller = GameController(
         initialMap = initialMap,
         gameMode = gameMode,
-        humanPlayerId = humanPlayerId
+        humanPlayerId = humanPlayerId,
+        bots = bots
     )
 
     /** Observable game state */

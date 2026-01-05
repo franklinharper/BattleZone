@@ -13,7 +13,7 @@ object MapGenerator {
     /**
      * Generate a complete game map
      */
-    fun generate(seed: Long? = null): GameMap {
+    fun generate(seed: Long? = null, playerCount: Int = 2): GameMap {
         val gameRandom = GameRandom(seed)
 
         // Build cell adjacency
@@ -36,10 +36,10 @@ object MapGenerator {
         traceTerritoryBorders(cells, territories, cellNeighbors)
 
         // Assign territories to players
-        assignTerritories(territories, gameRandom)
+        assignTerritories(territories, gameRandom, playerCount)
 
         // Distribute armies
-        distributeStartingArmies(territories, gameRandom)
+        distributeStartingArmies(territories, gameRandom, playerCount)
 
         val map = GameMap(
             gridWidth = HexGrid.GRID_WIDTH,
@@ -48,7 +48,7 @@ object MapGenerator {
             cells = cells,
             cellNeighbors = cellNeighbors,
             territories = territories,
-            playerCount = 2,
+            playerCount = playerCount,
             seed = seed,
             gameRandom = gameRandom
         )
@@ -417,20 +417,20 @@ object MapGenerator {
     /**
      * Assign territories to players
      */
-    private fun assignTerritories(territories: Array<Territory>, random: GameRandom) {
+    private fun assignTerritories(territories: Array<Territory>, random: GameRandom, playerCount: Int) {
         val territoryIndices = territories.indices.toList().toTypedArray()
         random.shuffle(territoryIndices)
 
         for (i in territoryIndices.indices) {
             val territory = territories[territoryIndices[i]]
-            territory.owner = i % 2 // Alternate between player 0 and 1
+            territory.owner = i % playerCount // Cycle through all players
         }
     }
 
     /**
      * Distribute starting armies
      */
-    private fun distributeStartingArmies(territories: Array<Territory>, random: GameRandom) {
+    private fun distributeStartingArmies(territories: Array<Territory>, random: GameRandom, playerCount: Int) {
         // Set all territories to 1 army
         for (territory in territories) {
             territory.armyCount = 1
@@ -441,7 +441,7 @@ object MapGenerator {
 
         // Distribute additional armies alternating between players
         repeat(additionalArmies) { index ->
-            val playerId = index % 2
+            val playerId = index % playerCount
 
             // Get all territories for this player that have < 8 armies
             val playerTerritories = territories.filter {
