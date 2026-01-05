@@ -166,4 +166,18 @@ object GameLogic {
         playerState.totalArmies = playerTerritories.sumOf { it.armyCount }
         playerState.largestConnectedSize = calculateLargestConnected(map, playerId)
     }
+
+    /**
+     * Check if a player has won the game (owns all territories)
+     *
+     * @param map The game map
+     * @param playerId The player to check for victory
+     * @return The winning player's ID, or null if no winner
+     */
+    fun checkVictory(map: GameMap, playerId: Int): Int? {
+        val allTerritoriesOwned = map.territories.all { territory ->
+            territory.size == 0 || territory.owner == playerId
+        }
+        return if (allTerritoriesOwned) playerId else null
+    }
 }
