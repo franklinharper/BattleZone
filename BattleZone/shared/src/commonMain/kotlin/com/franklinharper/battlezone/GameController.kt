@@ -216,23 +216,35 @@ class GameController(
         GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[0], 0)
         GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[1], 1)
 
-        // Force StateFlow update with new PlayerState copies so UI sees the changes
-        _gameState.value = _gameState.value.copy(
-            players = arrayOf(
-                currentGameState.players[0].copy(),
-                currentGameState.players[1].copy()
-            )
+        // Create new PlayerState copies with updated values
+        val updatedPlayers = arrayOf(
+            currentGameState.players[0].copy(),
+            currentGameState.players[1].copy()
         )
 
         // Check for victory
-        checkVictory()
+        val currentPlayer = currentGameState.currentPlayerIndex
+        val allTerritoriesOwned = currentGameState.map.territories.all { territory ->
+            territory.size == 0 || territory.owner == currentPlayer
+        }
 
-        if (_gameState.value.winner == null) {
-            // Reset consecutive skips since an attack occurred
-            _gameState.value = _gameState.value.copy(consecutiveSkips = 0)
-
-            // Switch to next player
-            nextPlayer()
+        if (allTerritoriesOwned) {
+            _gameState.value = _gameState.value.copy(
+                winner = currentPlayer,
+                gamePhase = GamePhase.GAME_OVER,
+                players = updatedPlayers
+            )
+            _uiState.value = _uiState.value.copy(
+                message = "🎉 ${getPlayerLabel(currentPlayer)} wins the game! 🎉"
+            )
+        } else {
+            // Update state with new players, reset skips, and advance to next player
+            val nextPlayerIndex = (currentGameState.currentPlayerIndex + 1) % currentGameState.map.playerCount
+            _gameState.value = _gameState.value.copy(
+                consecutiveSkips = 0,
+                currentPlayerIndex = nextPlayerIndex,
+                players = updatedPlayers
+            )
         }
     }
 
