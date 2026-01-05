@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * Represents the result of a combat action
  */
 data class CombatResult(
+    val attackerPlayerId: Int,
+    val defenderPlayerId: Int,
     val attackerRoll: IntArray,
     val defenderRoll: IntArray,
     val attackerTotal: Int,
@@ -22,7 +24,9 @@ data class CombatResult(
         if (other == null || this::class != other::class) return false
         other as CombatResult
 
-        return attackerRoll.contentEquals(other.attackerRoll) &&
+        return attackerPlayerId == other.attackerPlayerId &&
+                defenderPlayerId == other.defenderPlayerId &&
+                attackerRoll.contentEquals(other.attackerRoll) &&
                 defenderRoll.contentEquals(other.defenderRoll) &&
                 attackerTotal == other.attackerTotal &&
                 defenderTotal == other.defenderTotal &&
@@ -30,7 +34,9 @@ data class CombatResult(
     }
 
     override fun hashCode(): Int {
-        var result = attackerRoll.contentHashCode()
+        var result = attackerPlayerId
+        result = 31 * result + defenderPlayerId
+        result = 31 * result + attackerRoll.contentHashCode()
         result = 31 * result + defenderRoll.contentHashCode()
         result = 31 * result + attackerTotal
         result = 31 * result + defenderTotal
@@ -53,7 +59,8 @@ data class BotAttackArrow(
  */
 data class GameUiState(
     val currentBotDecision: BotDecision? = null,
-    val lastCombatResult: CombatResult? = null,
+    val playerCombatResults: Map<Int, CombatResult> = emptyMap(),
+    val skippedPlayers: Set<Int> = emptySet(),
     val message: String? = null,
     val isProcessing: Boolean = false,
     val selectedTerritoryId: Int? = null,
@@ -198,8 +205,13 @@ class GameController(
         // Determine if this is a bot attack
         val isBotAttack = isCurrentPlayerBot()
 
+        val attackerPlayerId = fromTerritory.owner
+        val defenderPlayerId = toTerritory.owner
+
         // Store combat result for UI
         val combatResult = CombatResult(
+            attackerPlayerId = attackerPlayerId,
+            defenderPlayerId = defenderPlayerId,
             attackerRoll = attackerRoll,
             defenderRoll = defenderRoll,
             attackerTotal = attackerTotal,
@@ -215,8 +227,11 @@ class GameController(
             toTerritory.armyCount = armiesTransferred
             fromTerritory.armyCount = 1
 
+            val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
+            println("DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries")
             _uiState.value = _uiState.value.copy(
-                lastCombatResult = combatResult,
+                playerCombatResults = updatedCombatResults,
+                skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
                 message = "${getPlayerLabel(currentGameState.currentPlayerIndex)} wins! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
                         "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
@@ -231,8 +246,11 @@ class GameController(
             // Defender wins: attacker loses all armies except 1
             fromTerritory.armyCount = 1
 
+            val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
+            println("DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries")
             _uiState.value = _uiState.value.copy(
-                lastCombatResult = combatResult,
+                playerCombatResults = updatedCombatResults,
+                skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
                 message = "${getPlayerLabel(toTerritory.owner)} defends! " +
                         "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
                         "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
@@ -255,10 +273,11 @@ class GameController(
             currentGameState.players[playerId].copy()
         }
 
-        // Check if defender is eliminated
+        // Check if defender is eliminated (use defenderPlayerId saved before ownership change)
         var eliminatedPlayers = currentGameState.eliminatedPlayers
-        if (updatedPlayers[toTerritory.owner].territoryCount == 0) {
-            eliminatedPlayers = eliminatedPlayers + toTerritory.owner
+        if (updatedPlayers[defenderPlayerId].territoryCount == 0) {
+            eliminatedPlayers = eliminatedPlayers + defenderPlayerId
+            println("DEBUG: Player $defenderPlayerId eliminated!")
         }
 
         // Check game end conditions
@@ -323,6 +342,7 @@ class GameController(
 
         _uiState.value = _uiState.value.copy(
             message = "${getPlayerLabel(currentPlayer)} skipped. ($skipCount/$activePlayerCount players skipped)",
+            skippedPlayers = _uiState.value.skippedPlayers + currentPlayer,  // Add to skipped set
             botAttackArrows = if (isCurrentPlayerHuman()) {
                 emptyList()  // Human skip - clear bot arrows from previous round
             } else {
@@ -383,7 +403,8 @@ class GameController(
         _gameState.value = _gameState.value.copy(gamePhase = GamePhase.REINFORCEMENT)
         _uiState.value = _uiState.value.copy(
             message = "Reinforcement Phase: All players skipped. Distributing reinforcements...",
-            botAttackArrows = emptyList()  // Clear bot attack arrows for new round
+            botAttackArrows = emptyList(),  // Clear bot attack arrows for new round
+            skippedPlayers = emptySet()  // Clear skipped players for new round
         )
     }
 
@@ -444,7 +465,7 @@ class GameController(
     /**
      * Check if the game is over
      */
-    fun isGameOver(): Boolean = _gameState.value.winner != null
+    fun isGameOver(): Boolean = _gameState.value.gamePhase == GamePhase.GAME_OVER
 
     /**
      * Get the current player index

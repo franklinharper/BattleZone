@@ -53,6 +53,8 @@ class AttackCommand(
         val attackerWins = attackerTotal > defenderTotal
 
         combatResult = CombatResult(
+            attackerPlayerId = fromTerritory.owner,
+            defenderPlayerId = toTerritory.owner,
             attackerRoll = attackerRoll,
             defenderRoll = defenderRoll,
             attackerTotal = attackerTotal,

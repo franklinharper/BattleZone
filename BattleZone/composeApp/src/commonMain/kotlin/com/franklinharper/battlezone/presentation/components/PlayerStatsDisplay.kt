@@ -3,6 +3,7 @@ package com.franklinharper.battlezone.presentation.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -11,6 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.franklinharper.battlezone.CombatResult
+import com.franklinharper.battlezone.GameColors
+import com.franklinharper.battlezone.GameMode
 import com.franklinharper.battlezone.PlayerState
 
 /**
@@ -23,34 +27,32 @@ fun PlayerStatsDisplay(
     label: String,
     color: Color,
     isEliminated: Boolean = false,
-    isCurrentPlayer: Boolean = false
+    isCurrentPlayer: Boolean = false,
+    combatResult: CombatResult? = null,
+    hasSkipped: Boolean = false,
+    gameMode: GameMode
 ) {
     val backgroundColor = when {
-        isCurrentPlayer -> color.copy(alpha = 0.2f)
-        else -> Color.Transparent
+        isEliminated -> Color.LightGray.copy(alpha = 0.3f)
+        else -> color.copy(alpha = 0.2f)
     }
 
     val textColor = when {
         isEliminated -> Color.Gray
-        else -> MaterialTheme.colorScheme.onBackground
+        else -> Color.Black
     }
 
     val labelColor = when {
         isEliminated -> Color.Gray
-        else -> color
+        else -> Color.Black
     }
 
     Column(
         horizontalAlignment = Alignment.Start,
         modifier = Modifier
+            .fillMaxWidth()
             .background(backgroundColor)
-            .then(
-                if (isCurrentPlayer) {
-                    Modifier.border(2.dp, color)
-                } else {
-                    Modifier
-                }
-            )
+            .border(2.dp, color)
             .padding(4.dp)
     ) {
         Text(
@@ -79,6 +81,44 @@ fun PlayerStatsDisplay(
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isEliminated) Color.Gray else MaterialTheme.colorScheme.error
             )
+        }
+
+        // Combat result or skip status display
+        println("DEBUG PlayerStatsDisplay: Player $playerIndex combat result: ${if (combatResult != null) "present" else "null"}")
+        if (hasSkipped) {
+            Text(
+                "skipped",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        } else {
+            combatResult?.let { combat ->
+                val defenderLabel = when (gameMode) {
+                    GameMode.HUMAN_VS_BOT -> if (combat.defenderPlayerId == 0) "Human" else "Bot ${combat.defenderPlayerId}"
+                    GameMode.BOT_VS_BOT -> "Bot ${combat.defenderPlayerId + 1}"
+                }
+
+                val resultEmoji = if (combat.attackerWins) "✅" else "❌"
+                val resultText = if (combat.attackerWins) "win" else "fail"
+
+                Text(
+                    "$resultEmoji attack $defenderLabel $resultText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Black,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Text(
+                    "attacker: [${combat.attackerRoll.joinToString(", ")}] = ${combat.attackerTotal}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = textColor
+                )
+                Text(
+                    "defender: [${combat.defenderRoll.joinToString(", ")}] = ${combat.defenderTotal}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = textColor
+                )
+            }
         }
     }
 }
