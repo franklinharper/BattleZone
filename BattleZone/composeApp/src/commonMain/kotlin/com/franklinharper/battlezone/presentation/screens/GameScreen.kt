@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.franklinharper.battlezone.*
+import com.franklinharper.battlezone.presentation.components.AnimationOverlay
 import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
 
@@ -25,6 +26,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     // Collect state from StateFlows
     val gameState by viewModel.gameState.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val animationState by viewModel.animationCoordinator.animationState.collectAsState()
 
     val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
 
@@ -237,7 +239,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             )
         }
 
-        // Map rendering
+        // Map rendering with animation overlay
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -249,27 +251,39 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 calculateCellDimensions(maxWidth.toPx(), maxHeight.toPx())
             }
 
-            MapRenderer(
-                map = gameState.map,
-                cellWidth = renderParams.cellWidth,
-                cellHeight = renderParams.cellHeight,
-                fontSize = renderParams.fontSize,
-                highlightedTerritories = when {
-                    uiState.currentBotDecision is BotDecision.Attack -> {
-                        val decision = uiState.currentBotDecision as BotDecision.Attack
-                        setOf(decision.fromTerritoryId, decision.toTerritoryId)
-                    }
-                    uiState.selectedTerritoryId != null -> {
-                        setOf(uiState.selectedTerritoryId!!)
-                    }
-                    else -> emptySet()
-                },
-                attackFromTerritory = when (val decision = uiState.currentBotDecision) {
-                    is BotDecision.Attack -> decision.fromTerritoryId
-                    else -> uiState.selectedTerritoryId
-                },
-                onTerritoryClick = territoryClickHandler
-            )
+            Box {
+                // Base map layer (always interactive)
+                MapRenderer(
+                    map = gameState.map,
+                    cellWidth = renderParams.cellWidth,
+                    cellHeight = renderParams.cellHeight,
+                    fontSize = renderParams.fontSize,
+                    highlightedTerritories = when {
+                        uiState.currentBotDecision is BotDecision.Attack -> {
+                            val decision = uiState.currentBotDecision as BotDecision.Attack
+                            setOf(decision.fromTerritoryId, decision.toTerritoryId)
+                        }
+                        uiState.selectedTerritoryId != null -> {
+                            setOf(uiState.selectedTerritoryId!!)
+                        }
+                        else -> emptySet()
+                    },
+                    attackFromTerritory = when (val decision = uiState.currentBotDecision) {
+                        is BotDecision.Attack -> decision.fromTerritoryId
+                        else -> uiState.selectedTerritoryId
+                    },
+                    onTerritoryClick = territoryClickHandler
+                )
+
+                // Animation overlay (does not block clicks)
+                AnimationOverlay(
+                    animations = animationState.activeAnimations.values.toList(),
+                    gameState = gameState,
+                    cellWidth = renderParams.cellWidth,
+                    cellHeight = renderParams.cellHeight,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
         }
     }
 }

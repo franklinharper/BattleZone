@@ -52,6 +52,15 @@ data class GameUiState(
 )
 
 /**
+ * Callback for attack animations
+ */
+data class AttackAnimationInfo(
+    val fromTerritoryId: Int,
+    val toTerritoryId: Int,
+    val attackerWins: Boolean
+)
+
+/**
  * Main game controller that manages game state and turn flow
  */
 class GameController(
@@ -59,7 +68,8 @@ class GameController(
     private val gameMode: GameMode = GameMode.BOT_VS_BOT,
     private val humanPlayerId: Int = 0,
     private val bot0: Bot = DefaultBot(initialMap.gameRandom),
-    private val bot1: Bot = DefaultBot(initialMap.gameRandom)
+    private val bot1: Bot = DefaultBot(initialMap.gameRandom),
+    private val onAttackAnimation: ((AttackAnimationInfo) -> Unit)? = null
 ) {
     private val _gameState = MutableStateFlow(createInitialGameState(initialMap))
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -176,6 +186,15 @@ class GameController(
         val attackerTotal = attackerRoll.sum()
         val defenderTotal = defenderRoll.sum()
         val attackerWins = attackerTotal > defenderTotal
+
+        // Trigger attack animation (non-blocking, purely visual)
+        onAttackAnimation?.invoke(
+            AttackAnimationInfo(
+                fromTerritoryId = fromTerritoryId,
+                toTerritoryId = toTerritoryId,
+                attackerWins = attackerWins
+            )
+        )
 
         // Store combat result for UI
         val combatResult = CombatResult(

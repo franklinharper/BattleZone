@@ -23,9 +23,9 @@ sealed class TurnAction {
  * Configuration for turn timing
  */
 data class TurnTiming(
-    val decisionDelay: Long = 800L,
-    val executionDelay: Long = 1200L,
-    val reinforcementDelay: Long = 1000L
+    val decisionDelay: Long = 0L,    // No delay - instant bot decisions
+    val executionDelay: Long = 0L,   // No delay - instant execution (animations show feedback)
+    val reinforcementDelay: Long = 500L
 )
 
 /**
