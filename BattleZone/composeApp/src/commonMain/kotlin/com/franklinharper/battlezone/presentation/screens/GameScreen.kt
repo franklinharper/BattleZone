@@ -71,6 +71,9 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
         }
     }
 
+    var mapWidth by remember { mutableStateOf(0.dp) }
+    var mapWidthPx by remember { mutableStateOf(0f) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -116,7 +119,8 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
+                    .fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Single BoxWithConstraints to measure available space and calculate map dimensions
                 BoxWithConstraints(
@@ -132,20 +136,22 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     }
 
                     // Calculate actual map width in pixels: formula from hex grid rendering
-                    val mapWidthPx = ((HexGrid.GRID_WIDTH * 2 + 1) * renderParams.cellWidth) / 2
-                    val mapWidth = with(density) { mapWidthPx.toDp() }
+                    val calculatedMapWidthPx = ((HexGrid.GRID_WIDTH * 2 + 1) * renderParams.cellWidth) / 2
+                    val calculatedMapWidth = with(density) { calculatedMapWidthPx.toDp() }
 
-                    // Center-aligned column for map and bottom row
-                    Column(
+                    if (calculatedMapWidth != mapWidth) {
+                        mapWidth = calculatedMapWidth
+                    }
+                    if (calculatedMapWidthPx != mapWidthPx) {
+                        mapWidthPx = calculatedMapWidthPx
+                    }
+
+                    Box(
                         modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        contentAlignment = Alignment.TopCenter
                     ) {
                         // Map with exact calculated width
-                        Box(
-                            modifier = Modifier
-                                .width(mapWidth)
-                                .weight(1f)
-                        ) {
+                        Box(modifier = Modifier.width(calculatedMapWidth)) {
                             // Base map layer (always interactive)
                             MapRenderer(
                                 map = gameState.map,
@@ -180,110 +186,140 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                 )
                             }
                         }
+                    }
+                }
 
-                        // Bottom row: exact same width as map
-                        Row(
-                            modifier = Modifier
-                                .width(mapWidth)
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Calculate font sizes based on map width (not window width)
-                            val baseFontSize = (mapWidthPx / 60f).coerceIn(10f, 24f)
-                            val labelFontSize = baseFontSize.sp
-                            val numberFontSize = (baseFontSize * 1.2f).sp
-                            val buttonFontSize = baseFontSize.sp
+                val bottomRowModifier = if (mapWidthPx > 0f) {
+                    Modifier.width(mapWidth)
+                } else {
+                    Modifier.fillMaxWidth()
+                }
 
-                            // Connected territories (left side, can wrap)
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                for (playerId in 0 until gameState.map.playerCount) {
-                                    val playerState = gameState.players[playerId]
-                                    val isEliminated = playerId in gameState.eliminatedPlayers
-                                    val playerColor = GameColors.getPlayerColor(playerId)
+                val showActionButton = when {
+                    viewModel.isGameOver() -> false
+                    gameState.gamePhase == GamePhase.REINFORCEMENT -> false
+                    viewModel.isCurrentPlayerHuman() -> true
+                    viewModel.isCurrentPlayerBot() && gameMode == GameMode.BOT_VS_BOT -> true
+                    else -> false
+                }
 
-                                    val label = when (gameMode) {
-                                        GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
-                                        GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
-                                    }
+                // Bottom row: exact same width as map
+                Row(
+                    modifier = bottomRowModifier.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val density = LocalDensity.current
 
-                                    // Player entry (kept together as a unit)
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // Colored box with player name
-                                        Box(
-                                            modifier = Modifier
-                                                .background(playerColor)
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                color = Color.Black,
-                                                fontSize = labelFontSize
-                                            )
-                                        }
+                    // Calculate font sizes based on map width (not window width)
+                    val baseFontSize = if (mapWidthPx > 0f) {
+                        val actionReservePx = if (showActionButton) {
+                            with(density) { ACTION_BUTTON_RESERVE_WIDTH.toPx() }
+                        } else {
+                            0f
+                        }
+                        val availableWidthPx = (mapWidthPx - actionReservePx).coerceAtLeast(0f)
+                        val perPlayerWidthPx = availableWidthPx / gameState.map.playerCount.coerceAtLeast(1)
+                        (perPlayerWidthPx / PLAYER_LABEL_FONT_DIVISOR).coerceIn(
+                            MIN_BOTTOM_ROW_FONT_SIZE,
+                            MAX_BOTTOM_ROW_FONT_SIZE
+                        )
+                    } else {
+                        12f
+                    }
+                    val labelFontSize = baseFontSize.sp
+                    val numberFontSize = (baseFontSize * 1.2f).sp
+                    val buttonFontSize = baseFontSize.sp
+                    val labelPaddingHorizontal = (baseFontSize * LABEL_HORIZONTAL_PADDING_SCALE).dp
+                    val labelPaddingVertical = (baseFontSize * LABEL_VERTICAL_PADDING_SCALE).dp
 
-                                        // Connected count (outside the box)
-                                        Text(
-                                            text = playerState.largestConnectedSize.toString(),
-                                            color = Color.Black,
-                                            fontSize = numberFontSize
-                                        )
-                                    }
-                                }
+                    // Connected territories (left side, can wrap)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        for (playerId in 0 until gameState.map.playerCount) {
+                            val playerState = gameState.players[playerId]
+                            val isEliminated = playerId in gameState.eliminatedPlayers
+                            val playerColor = GameColors.getPlayerColor(playerId)
+
+                            val label = when (gameMode) {
+                                GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
+                                GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
                             }
 
-                            // Action button (right side)
-                            when {
-                                viewModel.isGameOver() -> {
-                                    // Game over, no action button needed
+                            // Player entry (kept together as a unit)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Colored box with player name
+                                Box(
+                                    modifier = Modifier
+                                        .background(playerColor)
+                                        .padding(
+                                            horizontal = labelPaddingHorizontal,
+                                            vertical = labelPaddingVertical
+                                        )
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = Color.Black,
+                                        fontSize = labelFontSize
+                                    )
                                 }
-                                gameState.gamePhase == GamePhase.REINFORCEMENT -> {
-                                    // Reinforcements applied automatically - no button needed
-                                }
-                                viewModel.isCurrentPlayerHuman() -> {
-                                    // Human player's turn - show Skip button
-                                    Button(
-                                        onClick = { viewModel.skipTurn() },
-                                        modifier = Modifier.padding(start = 12.dp)
-                                    ) {
-                                        Text("Skip Turn", fontSize = buttonFontSize)
+
+                                // Connected count (outside the box)
+                                Text(
+                                    text = playerState.largestConnectedSize.toString(),
+                                    color = Color.Black,
+                                    fontSize = numberFontSize
+                                )
+                            }
+                        }
+                    }
+
+                    // Action button (right side)
+                    when {
+                        !showActionButton -> {
+                            // No action button needed
+                        }
+                        viewModel.isCurrentPlayerHuman() -> {
+                            // Human player's turn - show Skip button
+                            Button(
+                                onClick = { viewModel.skipTurn() },
+                                modifier = Modifier.padding(start = 12.dp)
+                            ) {
+                                Text("Skip Turn", fontSize = buttonFontSize)
+                            }
+                        }
+                        viewModel.isCurrentPlayerBot() -> {
+                            // Bot's turn - show manual controls only in Bot vs Bot mode
+                            if (gameMode == GameMode.BOT_VS_BOT) {
+                                when {
+                                    uiState.currentBotDecision == null -> {
+                                        Button(
+                                            onClick = { viewModel.requestBotDecision() },
+                                            modifier = Modifier.padding(start = 12.dp)
+                                        ) {
+                                            Text("Player ${viewModel.getCurrentPlayer()}: Make Decision", fontSize = buttonFontSize)
+                                        }
                                     }
-                                }
-                                viewModel.isCurrentPlayerBot() -> {
-                                    // Bot's turn - show manual controls only in Bot vs Bot mode
-                                    if (gameMode == GameMode.BOT_VS_BOT) {
-                                        when {
-                                            uiState.currentBotDecision == null -> {
-                                                Button(
-                                                    onClick = { viewModel.requestBotDecision() },
-                                                    modifier = Modifier.padding(start = 12.dp)
-                                                ) {
-                                                    Text("Player ${viewModel.getCurrentPlayer()}: Make Decision", fontSize = buttonFontSize)
-                                                }
-                                            }
-                                            uiState.currentBotDecision is BotDecision.Attack -> {
-                                                Button(
-                                                    onClick = { viewModel.executeBotDecision() },
-                                                    modifier = Modifier.padding(start = 12.dp)
-                                                ) {
-                                                    Text("Execute Attack", fontSize = buttonFontSize)
-                                                }
-                                            }
-                                            uiState.currentBotDecision is BotDecision.Skip -> {
-                                                Button(
-                                                    onClick = { viewModel.executeBotDecision() },
-                                                    modifier = Modifier.padding(start = 12.dp)
-                                                ) {
-                                                    Text("Skip Turn", fontSize = buttonFontSize)
-                                                }
-                                            }
+                                    uiState.currentBotDecision is BotDecision.Attack -> {
+                                        Button(
+                                            onClick = { viewModel.executeBotDecision() },
+                                            modifier = Modifier.padding(start = 12.dp)
+                                        ) {
+                                            Text("Execute Attack", fontSize = buttonFontSize)
+                                        }
+                                    }
+                                    uiState.currentBotDecision is BotDecision.Skip -> {
+                                        Button(
+                                            onClick = { viewModel.executeBotDecision() },
+                                            modifier = Modifier.padding(start = 12.dp)
+                                        ) {
+                                            Text("Skip Turn", fontSize = buttonFontSize)
                                         }
                                     }
                                 }
@@ -372,6 +408,12 @@ private const val MIN_CELL_HEIGHT = 7f
 private const val ORIGINAL_FONT_SIZE = 12f
 private const val MIN_FONT_SIZE = 8f
 private const val MAX_FONT_SIZE = 16f
+private const val MIN_BOTTOM_ROW_FONT_SIZE = 10f
+private const val MAX_BOTTOM_ROW_FONT_SIZE = 28f
+private const val PLAYER_LABEL_FONT_DIVISOR = 6f
+private const val LABEL_HORIZONTAL_PADDING_SCALE = 0.6f
+private const val LABEL_VERTICAL_PADDING_SCALE = 0.3f
+private val ACTION_BUTTON_RESERVE_WIDTH = 190.dp
 
 /**
  * Calculate optimal cell dimensions to fit the map within available space
