@@ -118,15 +118,13 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             // Map and action buttons column
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
+                    .weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Single BoxWithConstraints to measure available space and calculate map dimensions
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
                 ) {
                     val density = LocalDensity.current
 
@@ -138,6 +136,9 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     // Calculate actual map width in pixels: formula from hex grid rendering
                     val calculatedMapWidthPx = ((HexGrid.GRID_WIDTH * 2 + 1) * renderParams.cellWidth) / 2
                     val calculatedMapWidth = with(density) { calculatedMapWidthPx.toDp() }
+                    val calculatedMapHeight = with(density) {
+                        (HexGrid.GRID_HEIGHT * renderParams.cellHeight).toDp()
+                    }
 
                     if (calculatedMapWidth != mapWidth) {
                         mapWidth = calculatedMapWidth
@@ -147,7 +148,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     }
 
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.size(calculatedMapWidth, calculatedMapHeight),
                         contentAlignment = Alignment.TopCenter
                     ) {
                         // Map with exact calculated width
@@ -205,7 +206,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
 
                 // Bottom row: exact same width as map
                 Row(
-                    modifier = bottomRowModifier.padding(vertical = 8.dp),
+                    modifier = bottomRowModifier.padding(top = 32.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
