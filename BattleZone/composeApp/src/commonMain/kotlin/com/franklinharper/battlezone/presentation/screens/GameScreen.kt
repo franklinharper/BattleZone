@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,7 +74,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .background(Color.LightGray)
+                .background(Color.White)
                 .fillMaxSize()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -103,7 +104,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             }
         }
 
-        // Player stats and map side-by-side
+        // Map and action buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -111,192 +112,182 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Player stats - show all players
-            Column(
-                modifier = Modifier
-                    .width(280.dp)
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                for (playerId in 0 until gameState.map.playerCount) {
-                    val playerState = gameState.players[playerId]
-                    val isEliminated = playerId in gameState.eliminatedPlayers
-                    val isCurrentPlayer = playerId == gameState.currentPlayerIndex
-
-                    val label = when (gameMode) {
-                        GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
-                        GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
-                    }
-
-                    PlayerStatsDisplay(
-                        playerIndex = playerId,
-                        playerState = playerState,
-                        label = label,
-                        color = GameColors.getPlayerColor(playerId),
-                        isEliminated = isEliminated,
-                        isCurrentPlayer = isCurrentPlayer,
-                        combatResult = uiState.playerCombatResults[playerId],
-                        hasSkipped = playerId in uiState.skippedPlayers,
-                        gameMode = gameMode
-                    )
-                }
-            }
-
             // Map and action buttons column
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
             ) {
-                // Map rendering with animation overlay
+                // Single BoxWithConstraints to measure available space and calculate map dimensions
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.TopCenter
+                        .weight(1f)
                 ) {
-            val density = LocalDensity.current
-            val renderParams = with(density) {
-                calculateCellDimensions(maxWidth.toPx(), maxHeight.toPx())
-            }
+                    val density = LocalDensity.current
 
-            Box {
-                // Base map layer (always interactive)
-                MapRenderer(
-                    map = gameState.map,
-                    cellWidth = renderParams.cellWidth,
-                    cellHeight = renderParams.cellHeight,
-                    fontSize = renderParams.fontSize,
-                    highlightedTerritories = when {
-                        uiState.currentBotDecision is BotDecision.Attack -> {
-                            val decision = uiState.currentBotDecision as BotDecision.Attack
-                            setOf(decision.fromTerritoryId, decision.toTerritoryId)
-                        }
-                        uiState.selectedTerritoryId != null -> {
-                            setOf(uiState.selectedTerritoryId!!)
-                        }
-                        else -> emptySet()
-                    },
-                    attackFromTerritory = when (val decision = uiState.currentBotDecision) {
-                        is BotDecision.Attack -> decision.fromTerritoryId
-                        else -> uiState.selectedTerritoryId
-                    },
-                    onTerritoryClick = territoryClickHandler
-                )
-
-                // Bot attack arrows overlay (does not block clicks) - show all bot attacks
-                uiState.botAttackArrows.forEach { arrow ->
-                    BotAttackArrowOverlay(
-                        arrow = arrow,
-                        gameMap = gameState.map,
-                        cellWidth = renderParams.cellWidth,
-                        cellHeight = renderParams.cellHeight,
-                        modifier = Modifier.matchParentSize()
-                    )
-                }
-            }
-        }
-
-                // Action buttons (below map, right-aligned)
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth().padding(8.dp)
-                ) {
-                    when {
-                        viewModel.isGameOver() -> {
-                            // Game over, no action button needed
-                        }
-                        gameState.gamePhase == GamePhase.REINFORCEMENT -> {
-                            // Reinforcements applied automatically - no button needed
-                        }
-                        viewModel.isCurrentPlayerHuman() -> {
-                            // Human player's turn - show Skip button
-                            Button(
-                                onClick = {
-                                    viewModel.skipTurn()
-                                }
-                            ) {
-                                Text("Skip Turn")
-                            }
-                        }
-                        viewModel.isCurrentPlayerBot() -> {
-                            // Bot's turn - show manual controls only in Bot vs Bot mode
-                            if (gameMode == GameMode.BOT_VS_BOT) {
-                                when {
-                                    uiState.currentBotDecision == null -> {
-                                        Button(
-                                            onClick = {
-                                                viewModel.requestBotDecision()
-                                            }
-                                        ) {
-                                            Text("Player ${viewModel.getCurrentPlayer()}: Make Decision")
-                                        }
-                                    }
-                                    uiState.currentBotDecision is BotDecision.Attack -> {
-                                        Button(
-                                            onClick = {
-                                                viewModel.executeBotDecision()
-                                            }
-                                        ) {
-                                            Text("Execute Attack")
-                                        }
-                                    }
-                                    uiState.currentBotDecision is BotDecision.Skip -> {
-                                        Button(
-                                            onClick = {
-                                                viewModel.executeBotDecision()
-                                            }
-                                        ) {
-                                            Text("Skip Turn")
-                                        }
-                                    }
-                                }
-                            }
-                            // In Human vs Bot mode, bot turns execute automatically
-                        }
+                    // Calculate render parameters based on available space
+                    val renderParams = with(density) {
+                        calculateCellDimensions(maxWidth.toPx(), maxHeight.toPx())
                     }
-                }
 
-                // Connected territories row (below action buttons)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(8.dp)
-                ) {
-                    for (playerId in 0 until gameState.map.playerCount) {
-                        val playerState = gameState.players[playerId]
-                        val isEliminated = playerId in gameState.eliminatedPlayers
-                        val playerColor = GameColors.getPlayerColor(playerId)
+                    // Calculate actual map width in pixels: formula from hex grid rendering
+                    val mapWidthPx = ((HexGrid.GRID_WIDTH * 2 + 1) * renderParams.cellWidth) / 2
+                    val mapWidth = with(density) { mapWidthPx.toDp() }
 
-                        val label = when (gameMode) {
-                            GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
-                            GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Center-aligned column for map and bottom row
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Map with exact calculated width
+                        Box(
+                            modifier = Modifier
+                                .width(mapWidth)
+                                .weight(1f)
                         ) {
-                            // Colored box with player name
-                            Box(
-                                modifier = Modifier
-                                    .background(playerColor)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = Color.Black,
-                                    style = MaterialTheme.typography.bodySmall
+                            // Base map layer (always interactive)
+                            MapRenderer(
+                                map = gameState.map,
+                                cellWidth = renderParams.cellWidth,
+                                cellHeight = renderParams.cellHeight,
+                                fontSize = renderParams.fontSize,
+                                highlightedTerritories = when {
+                                    uiState.currentBotDecision is BotDecision.Attack -> {
+                                        val decision = uiState.currentBotDecision as BotDecision.Attack
+                                        setOf(decision.fromTerritoryId, decision.toTerritoryId)
+                                    }
+                                    uiState.selectedTerritoryId != null -> {
+                                        setOf(uiState.selectedTerritoryId!!)
+                                    }
+                                    else -> emptySet()
+                                },
+                                attackFromTerritory = when (val decision = uiState.currentBotDecision) {
+                                    is BotDecision.Attack -> decision.fromTerritoryId
+                                    else -> uiState.selectedTerritoryId
+                                },
+                                onTerritoryClick = territoryClickHandler
+                            )
+
+                            // Bot attack arrows overlay (does not block clicks) - show all bot attacks
+                            uiState.botAttackArrows.forEach { arrow ->
+                                BotAttackArrowOverlay(
+                                    arrow = arrow,
+                                    gameMap = gameState.map,
+                                    cellWidth = renderParams.cellWidth,
+                                    cellHeight = renderParams.cellHeight,
+                                    modifier = Modifier.matchParentSize()
                                 )
                             }
+                        }
 
-                            // Connected count (outside the box)
-                            Text(
-                                text = playerState.largestConnectedSize.toString(),
-                                color = Color.Black,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                        // Bottom row: exact same width as map
+                        Row(
+                            modifier = Modifier
+                                .width(mapWidth)
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Calculate font sizes based on map width (not window width)
+                            val baseFontSize = (mapWidthPx / 60f).coerceIn(10f, 24f)
+                            val labelFontSize = baseFontSize.sp
+                            val numberFontSize = (baseFontSize * 1.2f).sp
+                            val buttonFontSize = baseFontSize.sp
+
+                            // Connected territories (left side, can wrap)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                for (playerId in 0 until gameState.map.playerCount) {
+                                    val playerState = gameState.players[playerId]
+                                    val isEliminated = playerId in gameState.eliminatedPlayers
+                                    val playerColor = GameColors.getPlayerColor(playerId)
+
+                                    val label = when (gameMode) {
+                                        GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
+                                        GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
+                                    }
+
+                                    // Player entry (kept together as a unit)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        // Colored box with player name
+                                        Box(
+                                            modifier = Modifier
+                                                .background(playerColor)
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = Color.Black,
+                                                fontSize = labelFontSize
+                                            )
+                                        }
+
+                                        // Connected count (outside the box)
+                                        Text(
+                                            text = playerState.largestConnectedSize.toString(),
+                                            color = Color.Black,
+                                            fontSize = numberFontSize
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Action button (right side)
+                            when {
+                                viewModel.isGameOver() -> {
+                                    // Game over, no action button needed
+                                }
+                                gameState.gamePhase == GamePhase.REINFORCEMENT -> {
+                                    // Reinforcements applied automatically - no button needed
+                                }
+                                viewModel.isCurrentPlayerHuman() -> {
+                                    // Human player's turn - show Skip button
+                                    Button(
+                                        onClick = { viewModel.skipTurn() },
+                                        modifier = Modifier.padding(start = 12.dp)
+                                    ) {
+                                        Text("Skip Turn", fontSize = buttonFontSize)
+                                    }
+                                }
+                                viewModel.isCurrentPlayerBot() -> {
+                                    // Bot's turn - show manual controls only in Bot vs Bot mode
+                                    if (gameMode == GameMode.BOT_VS_BOT) {
+                                        when {
+                                            uiState.currentBotDecision == null -> {
+                                                Button(
+                                                    onClick = { viewModel.requestBotDecision() },
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                ) {
+                                                    Text("Player ${viewModel.getCurrentPlayer()}: Make Decision", fontSize = buttonFontSize)
+                                                }
+                                            }
+                                            uiState.currentBotDecision is BotDecision.Attack -> {
+                                                Button(
+                                                    onClick = { viewModel.executeBotDecision() },
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                ) {
+                                                    Text("Execute Attack", fontSize = buttonFontSize)
+                                                }
+                                            }
+                                            uiState.currentBotDecision is BotDecision.Skip -> {
+                                                Button(
+                                                    onClick = { viewModel.executeBotDecision() },
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                ) {
+                                                    Text("Skip Turn", fontSize = buttonFontSize)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
