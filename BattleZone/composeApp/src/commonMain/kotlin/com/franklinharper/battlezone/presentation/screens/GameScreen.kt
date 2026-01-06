@@ -40,6 +40,16 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     // Show overlay while in reinforcement phase
     val showReinforcementOverlay = gameState.gamePhase == GamePhase.REINFORCEMENT
 
+    // Game over overlay state
+    var showGameOverOverlay by remember { mutableStateOf(false) }
+
+    // Show game over overlay when game ends
+    LaunchedEffect(viewModel.isGameOver()) {
+        if (viewModel.isGameOver()) {
+            showGameOverOverlay = true
+        }
+    }
+
     // Auto-execute reinforcements after 2 seconds when phase changes to REINFORCEMENT
     LaunchedEffect(gameState.gamePhase) {
         if (gameState.gamePhase == GamePhase.REINFORCEMENT) {
@@ -252,7 +262,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
         }
 
         // Game over overlay
-        if (viewModel.isGameOver()) {
+        if (showGameOverOverlay && viewModel.isGameOver()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -263,22 +273,32 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 val humanWon = winner == 0 && gameMode == GameMode.HUMAN_VS_BOT
                 val isHumanGame = gameMode == GameMode.HUMAN_VS_BOT
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    // Large emoji
-                    Text(
-                        text = if (humanWon) "🏆" else if (isHumanGame) "💀" else "🎮",
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 72.dp.value.sp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Large emoji
+                        Text(
+                            text = if (humanWon) "🏆" else if (isHumanGame) "💀" else "🎮",
+                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 72.dp.value.sp)
+                        )
 
-                    // Victory or Defeat text
-                    Text(
-                        text = if (humanWon) "VICTORY!" else if (isHumanGame) "DEFEAT" else "GAME OVER",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = if (humanWon) Color.Green else Color.Red
-                    )
+                        // Victory or Defeat text
+                        Text(
+                            text = if (humanWon) "VICTORY!" else if (isHumanGame) "DEFEAT" else "GAME OVER",
+                            style = MaterialTheme.typography.displayLarge,
+                            color = if (humanWon) Color.Green else Color.Red
+                        )
+                    }
+
+                    // OK button
+                    Button(onClick = { showGameOverOverlay = false }) {
+                        Text("OK")
+                    }
                 }
             }
         }
