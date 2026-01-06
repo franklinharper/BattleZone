@@ -402,8 +402,8 @@ data class MapRenderingParams(
 )
 
 // Constants for responsive layout
-private const val ORIGINAL_CELL_WIDTH = 27f
-private const val ORIGINAL_CELL_HEIGHT = 18f
+internal const val ORIGINAL_CELL_WIDTH = 27f
+internal const val ORIGINAL_CELL_HEIGHT = 18f
 private const val MIN_CELL_WIDTH = 10f
 private const val MIN_CELL_HEIGHT = 7f
 private const val ORIGINAL_FONT_SIZE = 12f
