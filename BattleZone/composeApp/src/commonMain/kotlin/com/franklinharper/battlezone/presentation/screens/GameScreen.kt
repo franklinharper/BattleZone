@@ -257,6 +257,49 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                         }
                     }
                 }
+
+                // Connected territories row (below action buttons)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                ) {
+                    for (playerId in 0 until gameState.map.playerCount) {
+                        val playerState = gameState.players[playerId]
+                        val isEliminated = playerId in gameState.eliminatedPlayers
+                        val playerColor = GameColors.getPlayerColor(playerId)
+
+                        val label = when (gameMode) {
+                            GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
+                            GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Colored box with player name
+                            Box(
+                                modifier = Modifier
+                                    .background(playerColor)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = Color.Black,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+
+                            // Connected count (outside the box)
+                            Text(
+                                text = playerState.largestConnectedSize.toString(),
+                                color = Color.Black,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
             }
         }
         }
