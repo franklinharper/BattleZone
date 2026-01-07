@@ -44,33 +44,7 @@ class AttackCommand(
         previousToArmyCount = toTerritory.armyCount
         previousToOwner = toTerritory.owner
 
-        // Roll dice
-        val attackerRoll = gameRandom.rollDice(fromTerritory.armyCount)
-        val defenderRoll = gameRandom.rollDice(toTerritory.armyCount)
-
-        val attackerTotal = attackerRoll.sum()
-        val defenderTotal = defenderRoll.sum()
-        val attackerWins = attackerTotal > defenderTotal
-
-        combatResult = CombatResult(
-            attackerPlayerId = fromTerritory.owner,
-            defenderPlayerId = toTerritory.owner,
-            attackerRoll = attackerRoll,
-            defenderRoll = defenderRoll,
-            attackerTotal = attackerTotal,
-            defenderTotal = defenderTotal,
-            attackerWins = attackerWins
-        )
-
-        // Apply combat results
-        if (attackerWins) {
-            val armiesTransferred = fromTerritory.armyCount - 1
-            toTerritory.owner = fromTerritory.owner
-            toTerritory.armyCount = armiesTransferred
-            fromTerritory.armyCount = 1
-        } else {
-            fromTerritory.armyCount = 1
-        }
+        combatResult = GameLogic.resolveAttack(fromTerritory, toTerritory, gameRandom)
 
         return GameEvent.AttackExecuted(fromTerritoryId, toTerritoryId, combatResult!!)
     }
@@ -132,7 +106,7 @@ class DistributeReinforcementsCommand(
 
         repeat(totalToDistribute) {
             val eligibleTerritories = gameState.map.territories
-                .filter { it.owner == playerId && it.armyCount < 8 }
+                .filter { it.owner == playerId && it.armyCount < GameRules.MAX_ARMIES_PER_TERRITORY }
 
             if (eligibleTerritories.isEmpty()) {
                 remainingReserve++

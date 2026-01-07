@@ -63,6 +63,38 @@ object GameColors {
     val DebugCellOutline = Color(0xFFCCCCCC)
 
     /**
+     * UI colors
+     */
+    val ScreenBackground = Color(0xFFFFFFFF)
+    val UiTextPrimary = Color(0xFF000000)
+    val UiTextMuted = Color(0xFF808080)
+    val UiTextInverted = Color(0xFFFFFFFF)
+    val PanelEliminatedBackground = Color(0x4DD3D3D3)
+    val PlayerLabelBorder = Color(0x66000000)
+    val OverlayScrimStrong = Color(0xB3000000)
+    val OverlayScrim = Color(0x80000000)
+    val GameOverWin = Color(0xFF4CAF50)
+    val GameOverLoss = Color(0xFFFF0000)
+
+    /**
+     * Highlight colors
+     */
+    val HighlightAttack = Color(0xFFFF0000)
+    val HighlightDefend = Color(0xFFFFFF00)
+
+    /**
+     * Bot attack arrow colors
+     */
+    val BotArrowSuccess = Color(0xFFFF0000)
+    val BotArrowFailure = Color(0xFF0000FF)
+    val BotArrowOutline = Color(0xFFFFFFFF)
+
+    /**
+     * Fallback color for unknown player ID
+     */
+    val UnknownPlayer = Color(0xFF808080)
+
+    /**
      * Get the color for a specific player ID
      */
     fun getPlayerColor(playerId: Int): Color = when (playerId) {
@@ -74,6 +106,6 @@ object GameColors {
         5 -> Player5
         6 -> Player6
         7 -> Player7
-        else -> Color.Gray
+        else -> UnknownPlayer
     }
 }

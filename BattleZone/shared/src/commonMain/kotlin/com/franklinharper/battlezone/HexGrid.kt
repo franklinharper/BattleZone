@@ -12,7 +12,7 @@ package com.franklinharper.battlezone
 object HexGrid {
     const val GRID_WIDTH = 28
     const val GRID_HEIGHT = 32
-    const val MAX_TERRITORIES = 32
+    const val MAX_TERRITORIES = GameRules.MAX_TERRITORIES
     const val TOTAL_CELLS = GRID_WIDTH * GRID_HEIGHT
 
     /**

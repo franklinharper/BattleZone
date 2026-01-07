@@ -8,15 +8,15 @@ import kotlinx.coroutines.launch
 /**
  * Action to be taken during a turn
  */
-sealed class TurnAction {
+sealed class TurnCoordinatorAction {
     /** Request bot to make a decision */
-    object RequestBotDecision : TurnAction()
+    object RequestBotDecision : TurnCoordinatorAction()
 
     /** Execute the bot's decision */
-    object ExecuteBotDecision : TurnAction()
+    object ExecuteBotDecision : TurnCoordinatorAction()
 
     /** Execute reinforcement phase */
-    object ExecuteReinforcement : TurnAction()
+    object ExecuteReinforcement : TurnCoordinatorAction()
 }
 
 /**
@@ -41,8 +41,8 @@ class TurnCoordinator(
     private val scope: CoroutineScope,
     private val timing: TurnTiming = TurnTiming()
 ) {
-    private val _actions = MutableSharedFlow<TurnAction>()
-    val actions: SharedFlow<TurnAction> = _actions.asSharedFlow()
+    private val _actions = MutableSharedFlow<TurnCoordinatorAction>()
+    val actions: SharedFlow<TurnCoordinatorAction> = _actions.asSharedFlow()
 
     /**
      * Start coordinating turns for the given game state
@@ -53,6 +53,14 @@ class TurnCoordinator(
         gamePhase: GamePhase,
         hasBotDecision: Boolean
     ) {
+        if (gamePhase == GamePhase.REINFORCEMENT) {
+            scope.launch {
+                delay(timing.reinforcementDelay)
+                _actions.emit(TurnCoordinatorAction.ExecuteReinforcement)
+            }
+            return
+        }
+
         // Only coordinate bot turns in Human vs Bot mode
         if (gameMode != GameMode.HUMAN_VS_BOT || !isCurrentPlayerBot) {
             return
@@ -64,16 +72,12 @@ class TurnCoordinator(
                     if (!hasBotDecision) {
                         // Delay before requesting decision (visual feedback for turn change)
                         delay(timing.decisionDelay)
-                        _actions.emit(TurnAction.RequestBotDecision)
+                        _actions.emit(TurnCoordinatorAction.RequestBotDecision)
                     } else {
                         // Delay before executing (show highlighted attack to user)
                         delay(timing.executionDelay)
-                        _actions.emit(TurnAction.ExecuteBotDecision)
+                        _actions.emit(TurnCoordinatorAction.ExecuteBotDecision)
                     }
-                }
-                GamePhase.REINFORCEMENT -> {
-                    delay(timing.reinforcementDelay)
-                    _actions.emit(TurnAction.ExecuteReinforcement)
                 }
                 else -> {
                     // No action needed for other phases

@@ -34,18 +34,18 @@ fun PlayerStatsDisplay(
     gameMode: GameMode
 ) {
     val backgroundColor = when {
-        isEliminated -> Color.LightGray.copy(alpha = 0.3f)
+        isEliminated -> GameColors.PanelEliminatedBackground
         else -> color.copy(alpha = 0.2f)
     }
 
     val textColor = when {
-        isEliminated -> Color.Gray
-        else -> Color.Black
+        isEliminated -> GameColors.UiTextMuted
+        else -> GameColors.UiTextPrimary
     }
 
     val labelColor = when {
-        isEliminated -> Color.Gray
-        else -> Color.Black
+        isEliminated -> GameColors.UiTextMuted
+        else -> GameColors.UiTextPrimary
     }
 
     Column(
@@ -80,7 +80,7 @@ fun PlayerStatsDisplay(
             Text(
                 "Reserve: ${playerState.reserveArmies}",
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isEliminated) Color.Gray else MaterialTheme.colorScheme.error
+                color = if (isEliminated) GameColors.UiTextMuted else MaterialTheme.colorScheme.error
             )
         }
 
@@ -90,7 +90,7 @@ fun PlayerStatsDisplay(
             Text(
                 "skipped",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = GameColors.UiTextMuted,
                 modifier = Modifier.padding(top = 4.dp)
             )
         } else {
@@ -103,7 +103,7 @@ fun PlayerStatsDisplay(
                 Text(
                     "$resultEmoji attack $defenderLabel $resultText",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Black,
+                    color = GameColors.UiTextPrimary,
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 Text(

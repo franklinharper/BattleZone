@@ -7,10 +7,6 @@ import kotlin.random.Random
  * Based on Dice Wars implementation
  */
 object MapGenerator {
-    private const val MIN_TERRITORIES = 18
-    private const val MAX_TERRITORIES = 32
-    private const val TARGET_TERRITORY_SIZE = 8
-    private const val MIN_TERRITORY_SIZE = 6
 
     /**
      * Generate a complete game map
@@ -47,7 +43,7 @@ object MapGenerator {
         val map = GameMap(
             gridWidth = HexGrid.GRID_WIDTH,
             gridHeight = HexGrid.GRID_HEIGHT,
-            maxTerritories = MAX_TERRITORIES,
+            maxTerritories = GameRules.MAX_TERRITORIES,
             cells = cells,
             cellNeighbors = cellNeighbors,
             territories = territories,
@@ -81,7 +77,7 @@ object MapGenerator {
         var territoryId = 1
 
         // Generate territories
-        while (territoryId <= MAX_TERRITORIES) {
+        while (territoryId <= GameRules.MAX_TERRITORIES) {
             // Find unassigned cell with lowest shuffle number that's adjacent
             var seedCell = -1
             var lowestShuffle = Int.MAX_VALUE
@@ -128,7 +124,7 @@ object MapGenerator {
         var size = 0
 
         // Phase 1: Grow to target size
-        while (size < TARGET_TERRITORY_SIZE) {
+        while (size < GameRules.TARGET_TERRITORY_SIZE) {
             // Assign current cell to territory
             cells[currentCell] = territoryId
             size++
@@ -193,7 +189,7 @@ object MapGenerator {
         // Mark territories with size <= 5 for deletion
         val isDeleted = BooleanArray(maxTerritoryId + 1) { false }
         for (territoryId in 1..maxTerritoryId) {
-            if (territorySizes[territoryId] < MIN_TERRITORY_SIZE) {
+            if (territorySizes[territoryId] < GameRules.MIN_TERRITORY_SIZE) {
                 isDeleted[territoryId] = true
             }
         }
@@ -483,15 +479,15 @@ object MapGenerator {
         }
 
         // Calculate additional armies
-        val additionalArmies = territories.size * 2
+        val additionalArmies = territories.size * GameRules.STARTING_ARMY_MULTIPLIER
 
         // Distribute additional armies alternating between players
         repeat(additionalArmies) { index ->
             val playerId = index % playerCount
 
-            // Get all territories for this player that have < 8 armies
+            // Get all territories for this player that are below the max army cap
             val playerTerritories = territories.filter {
-                it.owner == playerId && it.armyCount < 8
+                it.owner == playerId && it.armyCount < GameRules.MAX_ARMIES_PER_TERRITORY
             }
 
             if (playerTerritories.isNotEmpty()) {

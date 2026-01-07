@@ -281,7 +281,7 @@ private fun buildBoundaryEdges(
     for (cellIndex in cellsInTerritory) {
         val neighbors = map.cellNeighbors[cellIndex].directions
         val (cellX, cellY) = HexGrid.getCellPosition(cellIndex, cellWidth, cellHeight)
-        for (dir in 0 until HEX_EDGE_COUNT) {
+        for (dir in 0 until UiConstants.HEX_EDGE_COUNT) {
             val neighborCell = neighbors[dir]
             val neighborTerritoryId = if (neighborCell != -1) map.cells[neighborCell] else -1
             if (neighborTerritoryId != territoryCellValue) {
@@ -374,4 +374,3 @@ private fun isPointInHex(
 
 private const val LABEL_SEARCH_STEP_COUNT = 2
 private const val LABEL_SEARCH_STEP_SCALE = 0.2f
-private const val HEX_EDGE_COUNT = 6

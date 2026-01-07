@@ -8,11 +8,8 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMap
 import com.franklinharper.battlezone.HexGeometry
+import com.franklinharper.battlezone.UiConstants
 import kotlin.math.max
-
-// Constants for rendering
-private const val ORIGINAL_CELL_WIDTH = 27f
-private const val HEX_EDGE_COUNT = 6
 
 /**
  * Handles all territory-specific rendering operations.
@@ -59,10 +56,10 @@ object TerritoryDrawer {
         cellHeight: Float,
         getCellPosition: (Int) -> Pair<Float, Float>
     ) {
-        val strokeWidth = max(0.5f, cellWidth / ORIGINAL_CELL_WIDTH)
+        val strokeWidth = max(0.5f, cellWidth / UiConstants.ORIGINAL_CELL_WIDTH)
         for (i in map.cells.indices) {
             val (cellX, cellY) = getCellPosition(i)
-            for (dir in 0 until HEX_EDGE_COUNT) {
+            for (dir in 0 until UiConstants.HEX_EDGE_COUNT) {
                 drawHexEdge(
                     cellX,
                     cellY,
@@ -104,7 +101,7 @@ object TerritoryDrawer {
                         cellHeight,
                         dir,
                         GameColors.TerritoryBorder,
-                        max(1f, 3f * (cellWidth / ORIGINAL_CELL_WIDTH))
+                        max(1f, 3f * (cellWidth / UiConstants.ORIGINAL_CELL_WIDTH))
                     )
                 }
             }
@@ -127,9 +124,9 @@ object TerritoryDrawer {
             if (territory.size == 0) continue
 
             val highlightColor = if (territoryId == attackFromTerritory) {
-                Color.Red // Attacking territory
+                GameColors.HighlightAttack
             } else {
-                Color.Yellow // Defending territory
+                GameColors.HighlightDefend
             }
 
             // Draw highlight border around territory outline only
@@ -153,7 +150,7 @@ object TerritoryDrawer {
                                 cellHeight,
                                 dir,
                                 highlightColor,
-                                max(4f, 6f * (cellWidth / ORIGINAL_CELL_WIDTH))
+                                max(4f, 6f * (cellWidth / UiConstants.ORIGINAL_CELL_WIDTH))
                             )
                         }
                     }

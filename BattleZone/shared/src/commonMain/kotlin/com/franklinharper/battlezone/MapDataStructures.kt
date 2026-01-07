@@ -146,7 +146,7 @@ data class GameState(
     val currentPlayerIndex: Int,
     val gamePhase: GamePhase,
     val eliminatedPlayers: Set<Int> = emptySet(),
-    val skipTracker: Map<Int, Boolean> = emptyMap(),
+    val skipTracker: Set<Int> = emptySet(),
     val winner: Int? = null,
     val turnHistory: List<Turn> = emptyList()
 ) {
@@ -251,7 +251,7 @@ class GameRandom(seed: Long? = null) {
     private val random = if (seed != null) Random(seed) else Random.Default
 
     fun rollDice(count: Int): IntArray {
-        return IntArray(count) { random.nextInt(1, 7) }
+        return IntArray(count) { random.nextInt(1, GameRules.DICE_SIDES + 1) }
     }
 
     fun selectRandomTerritory(territoryIds: List<Int>): Int {

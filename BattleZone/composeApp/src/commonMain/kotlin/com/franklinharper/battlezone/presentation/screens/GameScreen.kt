@@ -3,10 +3,7 @@ package com.franklinharper.battlezone.presentation.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,10 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -63,14 +58,6 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
         }
     }
 
-    // Auto-execute reinforcements after 2 seconds when phase changes to REINFORCEMENT
-    LaunchedEffect(gameState.gamePhase) {
-        if (gameState.gamePhase == GamePhase.REINFORCEMENT) {
-            delay(2000)
-            viewModel.executeReinforcementPhase()
-        }
-    }
-
     // Create a stable click handler
     val territoryClickHandler = remember(gameMode) {
         if (gameMode == GameMode.HUMAN_VS_BOT) {
@@ -105,7 +92,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .background(Color.White)
+                .background(GameColors.ScreenBackground)
                 .fillMaxSize()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -166,7 +153,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                         value = seedText,
                         onValueChange = { seedText = it },
                         singleLine = true,
-                        modifier = Modifier.width(SEED_FIELD_WIDTH)
+                        modifier = Modifier.width(UiConstants.SEED_FIELD_WIDTH)
                     )
                     Button(onClick = applySeed) {
                         Text("Apply")
@@ -304,15 +291,15 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     // Calculate font sizes based on map width (not window width)
                     val baseFontSize = if (mapWidthPx > 0f) {
                         val actionReservePx = if (showActionButton) {
-                            with(density) { ACTION_BUTTON_RESERVE_WIDTH.toPx() }
+                            with(density) { UiConstants.ACTION_BUTTON_RESERVE_WIDTH.toPx() }
                         } else {
                             0f
                         }
                         val availableWidthPx = (mapWidthPx - actionReservePx).coerceAtLeast(0f)
                         val perPlayerWidthPx = availableWidthPx / gameState.map.playerCount.coerceAtLeast(1)
-                        (perPlayerWidthPx / PLAYER_LABEL_FONT_DIVISOR).coerceIn(
-                            MIN_BOTTOM_ROW_FONT_SIZE,
-                            MAX_BOTTOM_ROW_FONT_SIZE
+                        (perPlayerWidthPx / UiConstants.PLAYER_LABEL_FONT_DIVISOR).coerceIn(
+                            UiConstants.MIN_BOTTOM_ROW_FONT_SIZE,
+                            UiConstants.MAX_BOTTOM_ROW_FONT_SIZE
                         )
                     } else {
                         12f
@@ -320,8 +307,8 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     val labelFontSize = baseFontSize.sp
                     val numberFontSize = (baseFontSize * 1.2f).sp
                     val buttonFontSize = baseFontSize.sp
-                    val labelPaddingHorizontal = (baseFontSize * LABEL_HORIZONTAL_PADDING_SCALE).dp
-                    val labelPaddingVertical = (baseFontSize * LABEL_VERTICAL_PADDING_SCALE).dp
+                    val labelPaddingHorizontal = (baseFontSize * UiConstants.LABEL_HORIZONTAL_PADDING_SCALE).dp
+                    val labelPaddingVertical = (baseFontSize * UiConstants.LABEL_VERTICAL_PADDING_SCALE).dp
 
                     // Connected territories (left side, can wrap)
                     FlowRow(
@@ -344,16 +331,16 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                 // Colored box with player name + reinforcements count.
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(PLAYER_LABEL_CONTENT_SPACING),
+                                    horizontalArrangement = Arrangement.spacedBy(UiConstants.PLAYER_LABEL_CONTENT_SPACING),
                                     modifier = Modifier
                                         .background(
                                             color = playerColor,
-                                            shape = PLAYER_LABEL_SHAPE
+                                            shape = UiConstants.PLAYER_LABEL_SHAPE
                                         )
                                         .border(
-                                            width = PLAYER_LABEL_BORDER_WIDTH,
-                                            color = PLAYER_LABEL_BORDER_COLOR,
-                                            shape = PLAYER_LABEL_SHAPE
+                                            width = UiConstants.PLAYER_LABEL_BORDER_WIDTH,
+                                            color = UiConstants.PLAYER_LABEL_BORDER_COLOR,
+                                            shape = UiConstants.PLAYER_LABEL_SHAPE
                                         )
                                         .padding(
                                             horizontal = labelPaddingHorizontal,
@@ -362,17 +349,17 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                 ) {
                                     Text(
                                         text = label,
-                                        color = Color.Black,
-                                        fontSize = labelFontSize
-                                    )
-                                    Text(
-                                        text = playerState.largestConnectedSize.toString(),
-                                        color = Color.Black,
-                                        fontSize = numberFontSize,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
+                            color = GameColors.UiTextPrimary,
+                            fontSize = labelFontSize
+                        )
+                        Text(
+                            text = playerState.largestConnectedSize.toString(),
+                            color = GameColors.UiTextPrimary,
+                            fontSize = numberFontSize,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
                         }
                     }
 
@@ -435,7 +422,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.7f)),
+                    .background(GameColors.OverlayScrimStrong),
                 contentAlignment = Alignment.Center
             ) {
                 val winner = gameState.winner
@@ -460,7 +447,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                         Text(
                             text = if (humanWon) "VICTORY!" else if (isHumanGame) "DEFEAT" else "GAME OVER",
                             style = MaterialTheme.typography.displayLarge,
-                            color = if (humanWon) Color.Green else Color.Red
+                            color = if (humanWon) GameColors.GameOverWin else GameColors.GameOverLoss
                         )
                     }
 
@@ -477,13 +464,13 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f)),
+                    .background(GameColors.OverlayScrim),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "Applying Reinforcements",
                     style = MaterialTheme.typography.displayMedium,
-                    color = Color.White
+                    color = GameColors.UiTextInverted
                 )
             }
         }
@@ -499,28 +486,6 @@ data class MapRenderingParams(
     val fontSize: Float
 )
 
-// Constants for responsive layout
-internal const val ORIGINAL_CELL_WIDTH = 27f
-internal const val ORIGINAL_CELL_HEIGHT = 18f
-private const val MIN_CELL_WIDTH = 10f
-private const val MIN_CELL_HEIGHT = 7f
-private const val ORIGINAL_FONT_SIZE = 12f
-private const val MIN_FONT_SIZE = 8f
-private const val MAX_FONT_SIZE = 16f
-private const val MIN_BOTTOM_ROW_FONT_SIZE = 10f
-private const val MAX_BOTTOM_ROW_FONT_SIZE = 28f
-private const val PLAYER_LABEL_FONT_DIVISOR = 6f
-private const val LABEL_HORIZONTAL_PADDING_SCALE = 0.6f
-private const val LABEL_VERTICAL_PADDING_SCALE = 0.3f
-private const val PLAYER_LABEL_BORDER_ALPHA = 0.4f
-private val PLAYER_LABEL_CORNER_RADIUS = 6.dp
-private val PLAYER_LABEL_SHAPE = RoundedCornerShape(PLAYER_LABEL_CORNER_RADIUS)
-private val PLAYER_LABEL_BORDER_WIDTH = 1.dp
-private val PLAYER_LABEL_BORDER_COLOR = Color.Black.copy(alpha = PLAYER_LABEL_BORDER_ALPHA)
-private val PLAYER_LABEL_CONTENT_SPACING = 8.dp
-private val ACTION_BUTTON_RESERVE_WIDTH = 190.dp
-private val SEED_FIELD_WIDTH = 240.dp
-
 /**
  * Calculate optimal cell dimensions to fit the map within available space
  * while maintaining the hexagon aspect ratio
@@ -530,19 +495,19 @@ fun calculateCellDimensions(
     availableHeightPx: Float
 ): MapRenderingParams {
     // Calculate scale factors for both dimensions
-    val scaleFromWidth = (availableWidthPx * 2f) / ((HexGrid.GRID_WIDTH * 2 + 1) * ORIGINAL_CELL_WIDTH)
-    val scaleFromHeight = availableHeightPx / (HexGrid.GRID_HEIGHT * ORIGINAL_CELL_HEIGHT)
+    val scaleFromWidth = (availableWidthPx * 2f) / ((HexGrid.GRID_WIDTH * 2 + 1) * UiConstants.ORIGINAL_CELL_WIDTH)
+    val scaleFromHeight = availableHeightPx / (HexGrid.GRID_HEIGHT * UiConstants.ORIGINAL_CELL_HEIGHT)
 
     // Use the smaller scale factor to ensure map fits in both dimensions
     val scale = kotlin.math.min(scaleFromWidth, scaleFromHeight)
 
     // Apply scale to original dimensions
-    val cellWidth = ORIGINAL_CELL_WIDTH * scale
-    val cellHeight = ORIGINAL_CELL_HEIGHT * scale
+    val cellWidth = UiConstants.ORIGINAL_CELL_WIDTH * scale
+    val cellHeight = UiConstants.ORIGINAL_CELL_HEIGHT * scale
 
     // Apply minimum size constraints
-    val finalCellWidth = kotlin.math.max(cellWidth, MIN_CELL_WIDTH)
-    val finalCellHeight = kotlin.math.max(cellHeight, MIN_CELL_HEIGHT)
+    val finalCellWidth = kotlin.math.max(cellWidth, UiConstants.MIN_CELL_WIDTH)
+    val finalCellHeight = kotlin.math.max(cellHeight, UiConstants.MIN_CELL_HEIGHT)
 
     // Calculate scaled font size
     val fontSize = calculateFontSize(finalCellWidth)
@@ -554,7 +519,7 @@ fun calculateCellDimensions(
  * Calculate font size based on cell scaling factor
  */
 fun calculateFontSize(cellWidth: Float): Float {
-    val scaleFactor = cellWidth / ORIGINAL_CELL_WIDTH
-    val scaledSize = ORIGINAL_FONT_SIZE * scaleFactor
-    return scaledSize.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+    val scaleFactor = cellWidth / UiConstants.ORIGINAL_CELL_WIDTH
+    val scaledSize = UiConstants.ORIGINAL_FONT_SIZE * scaleFactor
+    return scaledSize.coerceIn(UiConstants.MIN_FONT_SIZE, UiConstants.MAX_FONT_SIZE)
 }

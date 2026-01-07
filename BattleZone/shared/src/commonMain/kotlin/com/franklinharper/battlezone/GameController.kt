@@ -135,7 +135,7 @@ class GameController(
             currentPlayerIndex = startingPlayer,
             gamePhase = GamePhase.ATTACK,
             eliminatedPlayers = emptySet(),
-            skipTracker = emptyMap(),
+            skipTracker = emptySet(),
             winner = null
         )
     }
@@ -190,51 +190,27 @@ class GameController(
 
         // Validate attack
         if (fromTerritory.owner != currentGameState.currentPlayerIndex) return
-        if (fromTerritory.armyCount <= 1) return
+        if (fromTerritory.armyCount < GameRules.MIN_ARMIES_TO_ATTACK) return
         if (!fromTerritory.adjacentTerritories[toTerritoryId]) return
         if (toTerritory.owner == currentGameState.currentPlayerIndex) return
-
-        // Roll dice
-        val attackerRoll = currentGameState.map.gameRandom.rollDice(fromTerritory.armyCount)
-        val defenderRoll = currentGameState.map.gameRandom.rollDice(toTerritory.armyCount)
-
-        val attackerTotal = attackerRoll.sum()
-        val defenderTotal = defenderRoll.sum()
-        val attackerWins = attackerTotal > defenderTotal
 
         // Determine if this is a bot attack
         val isBotAttack = isCurrentPlayerBot()
 
-        val attackerPlayerId = fromTerritory.owner
-        val defenderPlayerId = toTerritory.owner
+        val combatResult = GameLogic.resolveAttack(fromTerritory, toTerritory, currentGameState.map.gameRandom)
 
-        // Store combat result for UI
-        val combatResult = CombatResult(
-            attackerPlayerId = attackerPlayerId,
-            defenderPlayerId = defenderPlayerId,
-            attackerRoll = attackerRoll,
-            defenderRoll = defenderRoll,
-            attackerTotal = attackerTotal,
-            defenderTotal = defenderTotal,
-            attackerWins = attackerWins
-        )
+        val attackerPlayerId = combatResult.attackerPlayerId
+        val defenderPlayerId = combatResult.defenderPlayerId
 
-        // Apply combat results
-        if (attackerWins) {
-            // Attacker wins: transfer armies and change ownership
-            val armiesTransferred = fromTerritory.armyCount - 1
-            toTerritory.owner = fromTerritory.owner
-            toTerritory.armyCount = armiesTransferred
-            fromTerritory.armyCount = 1
-
+        if (combatResult.attackerWins) {
             val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
             println("DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries")
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
                 message = "${getPlayerLabel(currentGameState.currentPlayerIndex)} wins! " +
-                        "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
-                        "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
+                        "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
+                        "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 botAttackArrows = if (isBotAttack) {
                     // Add this bot's attack arrow to the list
                     _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
@@ -243,17 +219,14 @@ class GameController(
                 }
             )
         } else {
-            // Defender wins: attacker loses all armies except 1
-            fromTerritory.armyCount = 1
-
             val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
             println("DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries")
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
                 message = "${getPlayerLabel(toTerritory.owner)} defends! " +
-                        "Attacker: ${attackerRoll.joinToString("+")} = $attackerTotal | " +
-                        "Defender: ${defenderRoll.joinToString("+")} = $defenderTotal",
+                        "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
+                        "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 botAttackArrows = if (isBotAttack) {
                     // Add this bot's attack arrow to the list
                     _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
@@ -315,7 +288,7 @@ class GameController(
 
         // Update state: reset skip tracker and advance to next player
         _gameState.value = _gameState.value.copy(
-            skipTracker = emptyMap(),  // Reset skip tracker after attack
+            skipTracker = emptySet(),  // Reset skip tracker after attack
             eliminatedPlayers = eliminatedPlayers,
             players = updatedPlayers
         )
@@ -332,13 +305,11 @@ class GameController(
         val isBotSkip = isCurrentPlayerBot()
 
         // Mark current player as skipped
-        val updatedSkipTracker = currentState.skipTracker + (currentPlayer to true)
+        val updatedSkipTracker = currentState.skipTracker + currentPlayer
 
         // Check if all non-eliminated players have skipped
         val activePlayerCount = currentState.map.playerCount - currentState.eliminatedPlayers.size
-        val skipCount = (0 until currentState.map.playerCount)
-            .filter { it !in currentState.eliminatedPlayers }
-            .count { updatedSkipTracker[it] == true }
+        val skipCount = (updatedSkipTracker - currentState.eliminatedPlayers).size
 
         _uiState.value = _uiState.value.copy(
             message = "${getPlayerLabel(currentPlayer)} skipped. ($skipCount/$activePlayerCount players skipped)",
@@ -446,7 +417,7 @@ class GameController(
         // Return to attack phase with new PlayerState copies and reset skip tracker
         _gameState.value = currentState.copy(
             gamePhase = GamePhase.ATTACK,
-            skipTracker = emptyMap(),  // Reset skip tracker for new round
+            skipTracker = emptySet(),  // Reset skip tracker for new round
             players = Array(currentState.map.playerCount) { playerId ->
                 currentState.players[playerId].copy()
             }
@@ -512,7 +483,7 @@ class GameController(
                 return
             }
 
-            if (territory.armyCount <= 1) {
+            if (territory.armyCount < GameRules.MIN_ARMIES_TO_ATTACK) {
                 _uiState.value = currentUiState.copy(errorMessage = "Territory must have more than 1 army to attack")
                 return
             }

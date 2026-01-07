@@ -86,9 +86,9 @@ fun App() {
                 LaunchedEffect(Unit) {
                     turnCoordinator.actions.collectLatest { action ->
                         when (action) {
-                            TurnAction.RequestBotDecision -> vm.requestBotDecision()
-                            TurnAction.ExecuteBotDecision -> vm.executeBotDecision()
-                            TurnAction.ExecuteReinforcement -> vm.executeReinforcementPhase()
+                            TurnCoordinatorAction.RequestBotDecision -> vm.requestBotDecision()
+                            TurnCoordinatorAction.ExecuteBotDecision -> vm.executeBotDecision()
+                            TurnCoordinatorAction.ExecuteReinforcement -> vm.executeReinforcementPhase()
                         }
                     }
                 }

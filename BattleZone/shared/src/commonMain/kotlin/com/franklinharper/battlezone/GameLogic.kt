@@ -4,6 +4,43 @@ package com.franklinharper.battlezone
  * Core game logic functions for BattleZone
  */
 object GameLogic {
+    /**
+     * Resolve an attack between two territories and apply the result.
+     */
+    fun resolveAttack(
+        fromTerritory: Territory,
+        toTerritory: Territory,
+        gameRandom: GameRandom
+    ): CombatResult {
+        val attackerRoll = gameRandom.rollDice(fromTerritory.armyCount)
+        val defenderRoll = gameRandom.rollDice(toTerritory.armyCount)
+
+        val attackerTotal = attackerRoll.sum()
+        val defenderTotal = defenderRoll.sum()
+        val attackerWins = attackerTotal > defenderTotal
+
+        val combatResult = CombatResult(
+            attackerPlayerId = fromTerritory.owner,
+            defenderPlayerId = toTerritory.owner,
+            attackerRoll = attackerRoll,
+            defenderRoll = defenderRoll,
+            attackerTotal = attackerTotal,
+            defenderTotal = defenderTotal,
+            attackerWins = attackerWins
+        )
+
+        if (attackerWins) {
+            val armiesTransferred = fromTerritory.armyCount - 1
+            toTerritory.owner = fromTerritory.owner
+            toTerritory.armyCount = armiesTransferred
+            fromTerritory.armyCount = 1
+        } else {
+            fromTerritory.armyCount = 1
+        }
+
+        return combatResult
+    }
+
 
     /**
      * Calculate the size of the largest connected component of territories for a player
@@ -107,7 +144,7 @@ object GameLogic {
      * Distribute reinforcement armies to a player's territories
      * Follows the design spec algorithm:
      * 1. Add reserve armies to new reinforcements
-     * 2. Randomly distribute to territories with <8 armies
+     * 2. Randomly distribute to territories below the max army cap
      * 3. Excess goes to reserve pool
      *
      * @param map The game map
@@ -132,9 +169,9 @@ object GameLogic {
         var remainingReserve = 0
 
         repeat(totalToDistribute) {
-            // Get territories with <8 armies
+            // Get territories below the max army cap
             val eligibleTerritories = map.territories.filter {
-                it.owner == playerId && it.armyCount < 8
+                it.owner == playerId && it.armyCount < GameRules.MAX_ARMIES_PER_TERRITORY
             }
 
             if (eligibleTerritories.isEmpty()) {

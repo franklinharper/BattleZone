@@ -124,7 +124,7 @@ class DefaultBot(private val random: GameRandom) : Bot {
         for (fromTerritory in map.territories) {
             if (fromTerritory.size == 0) continue
             if (fromTerritory.owner != playerId) continue
-            if (fromTerritory.armyCount <= 1) continue  // Can't attack with 1 army
+            if (fromTerritory.armyCount < GameRules.MIN_ARMIES_TO_ATTACK) continue
 
             // Check each adjacent territory
             for (toTerritoryId in fromTerritory.adjacentTerritories.indices) {

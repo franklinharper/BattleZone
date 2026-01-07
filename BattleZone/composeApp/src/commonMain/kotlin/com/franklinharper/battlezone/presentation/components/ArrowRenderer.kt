@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.franklinharper.battlezone.BotAttackArrow
+import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMap
 import com.franklinharper.battlezone.HexGeometry
 import com.franklinharper.battlezone.HexGrid
@@ -60,8 +61,8 @@ fun BotAttackArrowOverlay(
         drawArrowWithOutline(
             start = start,
             end = end,
-            color = if (arrow.attackSucceeded) Color.Red else Color.Blue,
-            outlineColor = Color.White,
+            color = if (arrow.attackSucceeded) GameColors.BotArrowSuccess else GameColors.BotArrowFailure,
+            outlineColor = GameColors.BotArrowOutline,
             strokeWidth = 4f,
             outlineWidth = 2f
         )
