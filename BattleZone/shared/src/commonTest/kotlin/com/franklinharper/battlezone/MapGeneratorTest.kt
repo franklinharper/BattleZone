@@ -238,6 +238,42 @@ class MapGeneratorTest {
     }
 
     @Test
+    fun testTerritoryCenterMaxDistanceToBorder() {
+        // Verify center position is one of the deepest interior cells.
+        val map = MapGenerator.generate(seed = 1337L)
+
+        for (territory in map.territories) {
+            val centerDistance = distanceToBorder(
+                map.cells,
+                map.cellNeighbors,
+                territory.id,
+                territory.centerPos
+            )
+
+            var maxDistance = -1
+            for (cellIndex in map.cells.indices) {
+                if (map.cells[cellIndex] == territory.id + 1) {
+                    val distance = distanceToBorder(
+                        map.cells,
+                        map.cellNeighbors,
+                        territory.id,
+                        cellIndex
+                    )
+                    if (distance > maxDistance) {
+                        maxDistance = distance
+                    }
+                }
+            }
+
+            assertEquals(
+                maxDistance,
+                centerDistance,
+                "Territory ${territory.id} center should be at max distance from border"
+            )
+        }
+    }
+
+    @Test
     fun testHasBorderCells() {
         // Verify territories have border cells (used for rendering)
         val map = MapGenerator.generate(seed = 777L)
@@ -299,6 +335,48 @@ class MapGeneratorTest {
                 }
             }
         }
+    }
+
+    private fun distanceToBorder(
+        cells: IntArray,
+        cellNeighbors: Array<CellNeighbors>,
+        territoryId: Int,
+        startCell: Int
+    ): Int {
+        val territoryCellValue = territoryId + 1
+        val distanceToBorder = IntArray(cells.size) { -1 }
+        val queue = ArrayDeque<Int>()
+
+        for (i in cells.indices) {
+            if (cells[i] == territoryCellValue) {
+                val neighbors = cellNeighbors[i].directions
+                var isBorder = false
+                for (neighbor in neighbors) {
+                    if (neighbor == -1 || cells[neighbor] != territoryCellValue) {
+                        isBorder = true
+                        break
+                    }
+                }
+                if (isBorder) {
+                    distanceToBorder[i] = 0
+                    queue.add(i)
+                }
+            }
+        }
+
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            val currentDistance = distanceToBorder[current]
+            val neighbors = cellNeighbors[current].directions
+            for (neighbor in neighbors) {
+                if (neighbor != -1 && cells[neighbor] == territoryCellValue && distanceToBorder[neighbor] == -1) {
+                    distanceToBorder[neighbor] = currentDistance + 1
+                    queue.add(neighbor)
+                }
+            }
+        }
+
+        return distanceToBorder[startCell]
     }
 
     @Test

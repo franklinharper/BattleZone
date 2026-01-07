@@ -8,7 +8,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,10 +24,14 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import com.franklinharper.battlezone.*
 import com.franklinharper.battlezone.presentation.components.BotAttackArrowOverlay
 import com.franklinharper.battlezone.presentation.components.MapRenderer
@@ -77,6 +84,8 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
 
     var mapWidth by remember { mutableStateOf(0.dp) }
     var mapWidthPx by remember { mutableStateOf(0f) }
+    var debugModeEnabled by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -95,6 +104,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
         // Control buttons (left-aligned)
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(8.dp)
         ) {
             Button(onClick = onBackToMenu) {
@@ -108,6 +118,40 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 }
             ) {
                 Text("New Game")
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Debug")
+                Switch(
+                    checked = debugModeEnabled,
+                    onCheckedChange = { debugModeEnabled = it }
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            if (debugModeEnabled) {
+                val seedLabel = gameState.map.seed?.toString() ?: "unknown"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Seed: $seedLabel",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    IconButton(
+                        onClick = { clipboardManager.setText(AnnotatedString(seedLabel)) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = "Copy seed"
+                        )
+                    }
+                }
             }
         }
 
@@ -163,6 +207,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                 cellWidth = renderParams.cellWidth,
                                 cellHeight = renderParams.cellHeight,
                                 fontSize = renderParams.fontSize,
+                                showTerritoryIds = debugModeEnabled,
                                 highlightedTerritories = when {
                                     uiState.currentBotDecision is BotDecision.Attack -> {
                                         val decision = uiState.currentBotDecision as BotDecision.Attack

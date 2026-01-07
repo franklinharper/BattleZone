@@ -1,5 +1,7 @@
 package com.franklinharper.battlezone
 
+import kotlin.random.Random
+
 /**
  * Map generator using percolation-based territory growth algorithm
  * Based on Dice Wars implementation
@@ -14,7 +16,8 @@ object MapGenerator {
      * Generate a complete game map
      */
     fun generate(seed: Long? = null, playerCount: Int = 2): GameMap {
-        val gameRandom = GameRandom(seed)
+        val resolvedSeed = seed ?: Random.nextLong()
+        val gameRandom = GameRandom(resolvedSeed)
 
         // Build cell adjacency
         val cellNeighbors = HexGrid.buildCellNeighbors()
@@ -27,7 +30,7 @@ object MapGenerator {
         val territories = createTerritories(cells, territoryCount)
 
         // Calculate territory properties
-        calculateTerritoryProperties(cells, territories)
+        calculateTerritoryProperties(cells, territories, cellNeighbors)
 
         // Calculate adjacency
         calculateTerritoryAdjacency(cells, territories, cellNeighbors)
@@ -49,7 +52,7 @@ object MapGenerator {
             cellNeighbors = cellNeighbors,
             territories = territories,
             playerCount = playerCount,
-            seed = seed,
+            seed = resolvedSeed,
             gameRandom = gameRandom
         )
 
@@ -303,13 +306,20 @@ object MapGenerator {
     /**
      * Calculate territory properties (size, bounding box, center)
      */
-    private fun calculateTerritoryProperties(cells: IntArray, territories: Array<Territory>) {
-        // Calculate size and bounding box
+    private fun calculateTerritoryProperties(
+        cells: IntArray,
+        territories: Array<Territory>,
+        cellNeighbors: Array<CellNeighbors>
+    ) {
+        val territoryCells = Array(territories.size) { mutableListOf<Int>() }
+
+        // Calculate size, bounding box, and cell lists.
         for (i in cells.indices) {
             val territoryId = cells[i]
             if (territoryId > 0 && territoryId <= territories.size) {
                 val territory = territories[territoryId - 1]
                 territory.size++
+                territoryCells[territory.id].add(i)
 
                 val x = HexGrid.cellX(i)
                 val y = HexGrid.cellY(i)
@@ -321,31 +331,67 @@ object MapGenerator {
             }
         }
 
-        // Calculate center position
+        // Calculate center position using max distance to border.
         for (territory in territories) {
             val cx = (territory.left + territory.right) / 2
             val cy = (territory.top + territory.bottom) / 2
             territory.centerX = cx
             territory.centerY = cy
 
-            // Find cell closest to center that's not on border
-            var closestCell = -1
-            var minDist = Double.MAX_VALUE
+            val cellsInTerritory = territoryCells[territory.id]
+            if (cellsInTerritory.isEmpty()) {
+                territory.centerPos = 0
+                continue
+            }
 
-            for (i in cells.indices) {
-                if (cells[i] == territory.id + 1) {
-                    val x = HexGrid.cellX(i)
-                    val y = HexGrid.cellY(i)
-                    val dist = (x - cx) * (x - cx) + (y - cy) * (y - cy).toDouble()
+            val distanceToBorder = IntArray(cells.size) { -1 }
+            val queue = ArrayDeque<Int>()
 
-                    if (dist < minDist) {
-                        minDist = dist
-                        closestCell = i
+            for (cellIndex in cellsInTerritory) {
+                val neighbors = cellNeighbors[cellIndex].directions
+                var isBorder = false
+                for (neighbor in neighbors) {
+                    if (neighbor == -1 || cells[neighbor] != territory.id + 1) {
+                        isBorder = true
+                        break
+                    }
+                }
+                if (isBorder) {
+                    distanceToBorder[cellIndex] = 0
+                    queue.add(cellIndex)
+                }
+            }
+
+            while (queue.isNotEmpty()) {
+                val current = queue.removeFirst()
+                val currentDistance = distanceToBorder[current]
+                val neighbors = cellNeighbors[current].directions
+                for (neighbor in neighbors) {
+                    if (neighbor != -1 && cells[neighbor] == territory.id + 1 && distanceToBorder[neighbor] == -1) {
+                        distanceToBorder[neighbor] = currentDistance + 1
+                        queue.add(neighbor)
                     }
                 }
             }
 
-            territory.centerPos = if (closestCell != -1) closestCell else 0
+            var bestCell = cellsInTerritory.first()
+            var bestDistance = distanceToBorder[bestCell]
+            var bestCenterDistance = Double.MAX_VALUE
+
+            for (cellIndex in cellsInTerritory) {
+                val distance = distanceToBorder[cellIndex]
+                val x = HexGrid.cellX(cellIndex)
+                val y = HexGrid.cellY(cellIndex)
+                val centerDistance = (x - cx) * (x - cx) + (y - cy) * (y - cy).toDouble()
+
+                if (distance > bestDistance || (distance == bestDistance && centerDistance < bestCenterDistance)) {
+                    bestDistance = distance
+                    bestCenterDistance = centerDistance
+                    bestCell = cellIndex
+                }
+            }
+
+            territory.centerPos = bestCell
         }
     }
 

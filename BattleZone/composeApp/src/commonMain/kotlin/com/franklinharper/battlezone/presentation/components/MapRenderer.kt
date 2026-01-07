@@ -32,6 +32,7 @@ fun MapRenderer(
     cellWidth: Float,
     cellHeight: Float,
     fontSize: Float,
+    showTerritoryIds: Boolean = false,
     highlightedTerritories: Set<Int> = emptySet(),
     attackFromTerritory: Int? = null,
     onTerritoryClick: ((Int) -> Unit)? = null,
@@ -106,7 +107,11 @@ fun MapRenderer(
             if (territory.size == 0) continue
 
             val (centerX, centerY) = getCellPosition(territory.centerPos)
-            val displayText = "${territory.armyCount}"
+            val displayText = if (showTerritoryIds) {
+                "${territory.armyCount} (${territory.id})"
+            } else {
+                "${territory.armyCount}"
+            }
 
             val textLayoutResult = textMeasurer.measure(
                 text = displayText,
