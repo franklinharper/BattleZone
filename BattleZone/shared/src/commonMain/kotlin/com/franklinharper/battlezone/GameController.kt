@@ -204,7 +204,7 @@ class GameController(
 
         if (combatResult.attackerWins) {
             val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
-            println("DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries")
+            debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
@@ -220,7 +220,7 @@ class GameController(
             )
         } else {
             val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
-            println("DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries")
+            debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
@@ -250,7 +250,7 @@ class GameController(
         var eliminatedPlayers = currentGameState.eliminatedPlayers
         if (updatedPlayers[defenderPlayerId].territoryCount == 0) {
             eliminatedPlayers = eliminatedPlayers + defenderPlayerId
-            println("DEBUG: Player $defenderPlayerId eliminated!")
+            debugLog { "DEBUG: Player $defenderPlayerId eliminated!" }
         }
 
         // Check game end conditions

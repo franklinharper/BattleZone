@@ -33,6 +33,7 @@ import com.franklinharper.battlezone.presentation.components.BotAttackArrowOverl
 import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
 import com.franklinharper.battlezone.presentation.playerLabel
+import com.franklinharper.battlezone.debugLog
 
 /**
  * Main game screen showing the map and controls
@@ -62,7 +63,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     val territoryClickHandler = remember(gameMode) {
         if (gameMode == GameMode.HUMAN_VS_BOT) {
             { territoryId: Int ->
-                println("Territory clicked: $territoryId, Current player: ${viewModel.getCurrentPlayer()}, Is human turn: ${viewModel.isCurrentPlayerHuman()}")
+                debugLog { "Territory clicked: $territoryId, Current player: ${viewModel.getCurrentPlayer()}, Is human turn: ${viewModel.isCurrentPlayerHuman()}" }
                 viewModel.selectTerritory(territoryId)
             }
         } else {
@@ -72,7 +73,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
 
     var mapWidth by remember { mutableStateOf(0.dp) }
     var mapWidthPx by remember { mutableStateOf(0f) }
-    var debugModeEnabled by remember { mutableStateOf(false) }
+    var debugModeEnabled by remember { mutableStateOf(DebugFlags.enableLogs) }
     var seedText by remember { mutableStateOf("") }
     var debugCellIndex by remember { mutableStateOf<Int?>(null) }
     val clipboardManager = LocalClipboardManager.current
@@ -131,6 +132,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                     checked = debugModeEnabled,
                     onCheckedChange = { enabled ->
                         debugModeEnabled = enabled
+                        DebugFlags.enableLogs = enabled
                         if (!enabled) {
                             debugCellIndex = null
                         }

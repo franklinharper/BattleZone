@@ -16,6 +16,7 @@ import com.franklinharper.battlezone.CombatResult
 import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMode
 import com.franklinharper.battlezone.PlayerState
+import com.franklinharper.battlezone.debugLog
 import com.franklinharper.battlezone.presentation.playerLabel
 
 /**
@@ -85,7 +86,7 @@ fun PlayerStatsDisplay(
         }
 
         // Combat result or skip status display
-        println("DEBUG PlayerStatsDisplay: Player $playerIndex combat result: ${if (combatResult != null) "present" else "null"}")
+        debugLog { "DEBUG PlayerStatsDisplay: Player $playerIndex combat result: ${if (combatResult != null) "present" else "null"}" }
         if (hasSkipped) {
             Text(
                 "skipped",
