@@ -16,7 +16,6 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun App() {
     MaterialTheme {
         var selectedMode by remember { mutableStateOf<GameMode?>(null) }
-        var gameConfig by remember { mutableStateOf<GameConfig?>(null) }
         var viewModel by remember { mutableStateOf<GameViewModel?>(null) }
 
         when {
@@ -30,12 +29,10 @@ fun App() {
             }
 
             // Level 2: Player count selection (2-8 players)
-            gameConfig == null -> {
+            viewModel == null -> {
                 PlayerCountSelectionScreen(
                     gameMode = selectedMode!!,
                     onPlayerCountSelected = { playerCount ->
-                        gameConfig = GameConfig(selectedMode!!, playerCount)
-
                         // Generate map with the selected player count
                         val initialMap = MapGenerator.generate(playerCount = playerCount)
 
@@ -98,7 +95,6 @@ fun App() {
                     gameMode = selectedMode!!,
                     onBackToMenu = {
                         selectedMode = null
-                        gameConfig = null
                         viewModel = null
                     }
                 )

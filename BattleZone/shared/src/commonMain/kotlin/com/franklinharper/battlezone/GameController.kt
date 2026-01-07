@@ -86,7 +86,6 @@ class GameController(
     private val _events = MutableSharedFlow<GameEvent>()
     val events: SharedFlow<GameEvent> = _events.asSharedFlow()
 
-    private val commandHistory = CommandHistory()
 
     /**
      * Check if the current player is human
@@ -430,7 +429,6 @@ class GameController(
     fun newGame(map: GameMap) {
         _gameState.value = createInitialGameState(map)
         _uiState.value = GameUiState(message = "New game started! ${getPlayerLabel(_gameState.value.currentPlayerIndex)} goes first.")
-        commandHistory.clear()
     }
 
     /**
@@ -442,16 +440,6 @@ class GameController(
      * Get the current player index
      */
     fun getCurrentPlayer(): Int = _gameState.value.currentPlayerIndex
-
-    /**
-     * Check if undo is available
-     */
-    fun canUndo(): Boolean = commandHistory.canUndo()
-
-    /**
-     * Check if redo is available
-     */
-    fun canRedo(): Boolean = commandHistory.canRedo()
 
     /**
      * Human player selects a territory (for attack)

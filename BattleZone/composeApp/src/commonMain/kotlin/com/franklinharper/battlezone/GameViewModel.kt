@@ -66,11 +66,4 @@ class GameViewModel(
     /** Check if the current player is a bot */
     fun isCurrentPlayerBot(): Boolean = controller.isCurrentPlayerBot()
 
-    // Undo/Redo methods
-
-    /** Check if undo is available */
-    fun canUndo(): Boolean = controller.canUndo()
-
-    /** Check if redo is available */
-    fun canRedo(): Boolean = controller.canRedo()
 }

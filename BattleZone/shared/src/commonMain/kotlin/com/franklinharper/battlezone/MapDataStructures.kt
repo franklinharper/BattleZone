@@ -147,8 +147,7 @@ data class GameState(
     val gamePhase: GamePhase,
     val eliminatedPlayers: Set<Int> = emptySet(),
     val skipTracker: Set<Int> = emptySet(),
-    val winner: Int? = null,
-    val turnHistory: List<Turn> = emptyList()
+    val winner: Int? = null
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -161,8 +160,7 @@ data class GameState(
                 gamePhase == other.gamePhase &&
                 eliminatedPlayers == other.eliminatedPlayers &&
                 skipTracker == other.skipTracker &&
-                winner == other.winner &&
-                turnHistory == other.turnHistory
+                winner == other.winner
     }
 
     override fun hashCode(): Int {
@@ -173,7 +171,6 @@ data class GameState(
         result = 31 * result + eliminatedPlayers.hashCode()
         result = 31 * result + skipTracker.hashCode()
         result = 31 * result + (winner ?: 0)
-        result = 31 * result + turnHistory.hashCode()
         return result
     }
 }
@@ -188,14 +185,6 @@ enum class GameMode {
     HUMAN_VS_BOT,
     BOT_VS_BOT
 }
-
-/**
- * Game configuration combining mode and player count
- */
-data class GameConfig(
-    val gameMode: GameMode,
-    val playerCount: Int
-)
 
 /**
  * Represents a single turn action
