@@ -18,6 +18,10 @@ object UiConstants {
     const val LABEL_VERTICAL_PADDING_SCALE = 0.3f
     const val PLAYER_LABEL_BORDER_ALPHA = 0.4f
     const val HEX_EDGE_COUNT = 6
+    const val PLAYBACK_STEP_DELAY_MS = 800L
+    const val PLAYBACK_SPEED_HALF = 0.5f
+    const val PLAYBACK_SPEED_NORMAL = 1.0f
+    const val PLAYBACK_SPEED_DOUBLE = 2.0f
 
     val PLAYER_LABEL_CORNER_RADIUS = 6.dp
     val PLAYER_LABEL_SHAPE = RoundedCornerShape(PLAYER_LABEL_CORNER_RADIUS)

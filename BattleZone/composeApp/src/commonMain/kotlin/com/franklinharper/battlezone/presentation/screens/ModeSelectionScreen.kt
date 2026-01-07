@@ -10,12 +10,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.franklinharper.battlezone.GameMode
+import com.franklinharper.battlezone.GameColors
 
 /**
  * Screen for selecting game mode
  */
 @Composable
-fun ModeSelectionScreen(onModeSelected: (GameMode) -> Unit) {
+fun ModeSelectionScreen(
+    onModeSelected: (GameMode) -> Unit,
+    onLoadRecording: () -> Unit,
+    statusMessage: String? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -46,6 +51,24 @@ fun ModeSelectionScreen(onModeSelected: (GameMode) -> Unit) {
                 .padding(8.dp)
         ) {
             Text("Bot vs Bot", style = MaterialTheme.typography.headlineSmall)
+        }
+
+        Button(
+            onClick = onLoadRecording,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
+            Text("Load Recording", style = MaterialTheme.typography.headlineSmall)
+        }
+
+        statusMessage?.let { message ->
+            Text(
+                text = message,
+                color = GameColors.UiTextError,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
         }
     }
 }

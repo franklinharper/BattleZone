@@ -29,6 +29,12 @@ class GameViewModel(
     /** Observable game events */
     val events = controller.events
 
+    /** Observable replay mode state */
+    val replayMode: StateFlow<Boolean> = controller.replayMode
+
+    /** Observable playback info */
+    val playbackInfo: StateFlow<PlaybackInfo> = controller.playbackInfo
+
     // Game control methods
 
     /** Request the current bot to make a decision */
@@ -51,6 +57,33 @@ class GameViewModel(
 
     /** Cancel the current territory selection */
     fun cancelSelection() = controller.cancelSelection()
+
+    /** Undo the last recorded action */
+    fun undo() = controller.undo()
+
+    /** Redo the last undone action */
+    fun redo() = controller.redo()
+
+    /** Check if undo is available */
+    fun canUndo(): Boolean = controller.canUndo()
+
+    /** Check if redo is available */
+    fun canRedo(): Boolean = controller.canRedo()
+
+    /** Export recording as JSON */
+    fun exportRecordingJson(): String = controller.exportRecordingJson()
+
+    /** Import recording from JSON */
+    fun importRecordingJson(json: String): Boolean = controller.importRecordingJson(json)
+
+    /** Seek to a specific playback index */
+    fun seekToPlaybackIndex(index: Int) = controller.seekToIndex(index)
+
+    /** Set a user-visible status message */
+    fun setMessage(message: String?) = controller.setMessage(message)
+
+    /** Set a user-visible error message */
+    fun setErrorMessage(message: String?) = controller.setErrorMessage(message)
 
     // Status methods
 

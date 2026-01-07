@@ -175,12 +175,14 @@ data class GameState(
     }
 }
 
+@kotlinx.serialization.Serializable
 enum class GamePhase {
     ATTACK,
     REINFORCEMENT,
     GAME_OVER
 }
 
+@kotlinx.serialization.Serializable
 enum class GameMode {
     HUMAN_VS_BOT,
     BOT_VS_BOT

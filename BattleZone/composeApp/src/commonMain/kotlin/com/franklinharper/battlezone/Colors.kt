@@ -69,6 +69,7 @@ object GameColors {
     val UiTextPrimary = Color(0xFF000000)
     val UiTextMuted = Color(0xFF808080)
     val UiTextInverted = Color(0xFFFFFFFF)
+    val UiTextError = Color(0xFFD32F2F)
     val PanelEliminatedBackground = Color(0x4DD3D3D3)
     val PlayerLabelBorder = Color(0x66000000)
     val OverlayScrimStrong = Color(0xB3000000)

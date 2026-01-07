@@ -159,34 +159,12 @@ object GameLogic {
         reinforcements: Int,
         currentReserve: Int
     ): Int {
-        require(playerId >= 0 && playerId < map.playerCount) {
-            "Invalid player ID: $playerId (must be 0 to ${map.playerCount - 1})"
-        }
-        require(reinforcements >= 0) { "Reinforcements cannot be negative: $reinforcements" }
-        require(currentReserve >= 0) { "Current reserve cannot be negative: $currentReserve" }
-
-        val totalToDistribute = reinforcements + currentReserve
-        var remainingReserve = 0
-
-        repeat(totalToDistribute) {
-            // Get territories below the max army cap
-            val eligibleTerritories = map.territories.filter {
-                it.owner == playerId && it.armyCount < GameRules.MAX_ARMIES_PER_TERRITORY
-            }
-
-            if (eligibleTerritories.isEmpty()) {
-                // All territories at max, add to reserve
-                remainingReserve++
-            } else {
-                // Randomly select a territory and add 1 army
-                val selectedTerritory = eligibleTerritories[
-                    map.gameRandom.nextInt(eligibleTerritories.size)
-                ]
-                selectedTerritory.armyCount++
-            }
-        }
-
-        return remainingReserve
+        return distributeReinforcementsWithLog(
+            map = map,
+            playerId = playerId,
+            reinforcements = reinforcements,
+            currentReserve = currentReserve
+        ).reserveArmies
     }
 
     /**
@@ -202,5 +180,64 @@ object GameLogic {
         playerState.territoryCount = playerTerritories.size
         playerState.totalArmies = playerTerritories.sumOf { it.armyCount }
         playerState.largestConnectedSize = calculateLargestConnected(map, playerId)
+    }
+
+    /**
+     * Apply a recorded combat result to the map without rolling dice.
+     */
+    fun applyAttackResult(
+        fromTerritory: Territory,
+        toTerritory: Territory,
+        combatResult: CombatResult
+    ) {
+        if (combatResult.attackerWins) {
+            val armiesTransferred = fromTerritory.armyCount - 1
+            toTerritory.owner = fromTerritory.owner
+            toTerritory.armyCount = armiesTransferred
+            fromTerritory.armyCount = 1
+        } else {
+            fromTerritory.armyCount = 1
+        }
+    }
+
+    /**
+     * Distribute reinforcements and return a log for replay.
+     */
+    fun distributeReinforcementsWithLog(
+        map: GameMap,
+        playerId: Int,
+        reinforcements: Int,
+        currentReserve: Int
+    ): ReinforcementDistribution {
+        require(playerId >= 0 && playerId < map.playerCount) {
+            "Invalid player ID: $playerId (must be 0 to ${map.playerCount - 1})"
+        }
+        require(reinforcements >= 0) { "Reinforcements cannot be negative: $reinforcements" }
+        require(currentReserve >= 0) { "Current reserve cannot be negative: $currentReserve" }
+
+        val totalToDistribute = reinforcements + currentReserve
+        var remainingReserve = 0
+        val territoryIncrements = mutableListOf<Int>()
+
+        repeat(totalToDistribute) {
+            val eligibleTerritories = map.territories.filter {
+                it.owner == playerId && it.armyCount < GameRules.MAX_ARMIES_PER_TERRITORY
+            }
+
+            if (eligibleTerritories.isEmpty()) {
+                remainingReserve++
+            } else {
+                val selectedTerritory = eligibleTerritories[
+                    map.gameRandom.nextInt(eligibleTerritories.size)
+                ]
+                selectedTerritory.armyCount++
+                territoryIncrements.add(selectedTerritory.id)
+            }
+        }
+
+        return ReinforcementDistribution(
+            territoryIncrements = territoryIncrements,
+            reserveArmies = remainingReserve
+        )
     }
 }

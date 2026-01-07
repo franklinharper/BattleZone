@@ -86,6 +86,21 @@ class GameController(
     private val _events = MutableSharedFlow<GameEvent>()
     val events: SharedFlow<GameEvent> = _events.asSharedFlow()
 
+    private val undoStack = ArrayDeque<GameSnapshot>()
+    private val redoStack = ArrayDeque<GameSnapshot>()
+    private val recordedEvents = ArrayDeque<RecordedEvent>()
+    private var recordingStartSnapshot: GameSnapshot = GameSnapshot(_gameState.value.deepCopy(), _uiState.value.deepCopy())
+    private var recordingEnabled = true
+
+    private val _replayMode = MutableStateFlow(false)
+    val replayMode: StateFlow<Boolean> = _replayMode.asStateFlow()
+
+    private val _playbackInfo = MutableStateFlow(PlaybackInfo(index = 0, total = 1))
+    val playbackInfo: StateFlow<PlaybackInfo> = _playbackInfo.asStateFlow()
+
+    init {
+        resetHistory()
+    }
 
     /**
      * Check if the current player is human
@@ -132,6 +147,7 @@ class GameController(
      * Request the current bot to make a decision
      */
     fun requestBotDecision() {
+        if (!canMutateGame()) return
         if (_gameState.value.gamePhase != GamePhase.ATTACK) return
         if (_gameState.value.winner != null) return
 
@@ -157,6 +173,7 @@ class GameController(
      * Execute the current bot's decision (attack or skip)
      */
     fun executeBotDecision() {
+        if (!canMutateGame()) return
         val decision = _uiState.value.currentBotDecision ?: return
 
         when (decision) {
@@ -182,112 +199,30 @@ class GameController(
         if (!fromTerritory.adjacentTerritories[toTerritoryId]) return
         if (toTerritory.owner == currentGameState.currentPlayerIndex) return
 
-        // Determine if this is a bot attack
-        val isBotAttack = isCurrentPlayerBot()
-
         val combatResult = GameLogic.resolveAttack(fromTerritory, toTerritory, currentGameState.map.gameRandom)
 
-        val attackerPlayerId = combatResult.attackerPlayerId
-        val defenderPlayerId = combatResult.defenderPlayerId
-
-        if (combatResult.attackerWins) {
-            val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
-            debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
-            _uiState.value = _uiState.value.copy(
-                playerCombatResults = updatedCombatResults,
-                skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
-                message = "${playerLabel(currentGameState.currentPlayerIndex, gameMode)} wins! " +
-                        "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
-                        "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
-                botAttackArrows = if (isBotAttack) {
-                    // Add this bot's attack arrow to the list
-                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
-                } else {
-                    emptyList()  // Human attack - clear all bot arrows
-                }
-            )
-        } else {
-            val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
-            debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
-            _uiState.value = _uiState.value.copy(
-                playerCombatResults = updatedCombatResults,
-                skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
-                message = "${playerLabel(toTerritory.owner, gameMode)} defends! " +
-                        "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
-                        "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
-                botAttackArrows = if (isBotAttack) {
-                    // Add this bot's attack arrow to the list
-                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
-                } else {
-                    emptyList()  // Human attack - clear all bot arrows
-                }
-            )
-        }
-
-        // Update all player states
-        for (playerId in 0 until currentGameState.map.playerCount) {
-            GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[playerId], playerId)
-        }
-
-        // Create new PlayerState copies with updated values
-        val updatedPlayers = Array(currentGameState.map.playerCount) { playerId ->
-            currentGameState.players[playerId].copy()
-        }
-
-        // Check if defender is eliminated (use defenderPlayerId saved before ownership change)
-        var eliminatedPlayers = currentGameState.eliminatedPlayers
-        if (updatedPlayers[defenderPlayerId].territoryCount == 0) {
-            eliminatedPlayers = eliminatedPlayers + defenderPlayerId
-            debugLog { "DEBUG: Player $defenderPlayerId eliminated!" }
-        }
-
-        // Check game end conditions
-        val currentPlayer = currentGameState.currentPlayerIndex
-
-        // Human eliminated → human loses immediately
-        if (gameMode == GameMode.HUMAN_VS_BOT && humanPlayerId in eliminatedPlayers) {
-            _gameState.value = _gameState.value.copy(
-                gamePhase = GamePhase.GAME_OVER,
-                winner = null,
-                players = updatedPlayers,
-                eliminatedPlayers = eliminatedPlayers
-            )
-            _uiState.value = _uiState.value.copy(
-                message = "💀 ${playerLabel(humanPlayerId, gameMode)} eliminated! Game Over."
-            )
-            return
-        }
-
-        // Count remaining players
-        val remainingPlayers = (0 until currentGameState.map.playerCount).filter { it !in eliminatedPlayers }
-        if (remainingPlayers.size == 1) {
-            val winner = remainingPlayers[0]
-            _gameState.value = _gameState.value.copy(
-                winner = winner,
-                gamePhase = GamePhase.GAME_OVER,
-                players = updatedPlayers,
-                eliminatedPlayers = eliminatedPlayers
-            )
-            _uiState.value = _uiState.value.copy(
-                message = "🎉 ${playerLabel(winner, gameMode)} wins the game! 🎉"
-            )
-            return
-        }
-
-        // Update state: reset skip tracker and advance to next player
-        _gameState.value = _gameState.value.copy(
-            skipTracker = emptySet(),  // Reset skip tracker after attack
-            eliminatedPlayers = eliminatedPlayers,
-            players = updatedPlayers
+        applyAttackOutcome(
+            fromTerritoryId = fromTerritoryId,
+            toTerritoryId = toTerritoryId,
+            combatResult = combatResult,
+            mutateMap = false
         )
 
-        nextPlayer()
+        recordAction(
+            RecordedEvent.Attack(
+                fromTerritoryId = fromTerritoryId,
+                toTerritoryId = toTerritoryId,
+                result = combatResult.toRecordedCombatResult()
+            )
+        )
+        recordSnapshot()
     }
 
     /**
      * Skip the current player's turn
      */
     fun skipTurn() {
+        if (!canMutateGame()) return
         val currentState = _gameState.value
         val currentPlayer = currentState.currentPlayerIndex
         val isBotSkip = isCurrentPlayerBot()
@@ -317,6 +252,8 @@ class GameController(
         } else {
             nextPlayer()
         }
+        recordAction(RecordedEvent.Skip(playerId = currentPlayer))
+        recordSnapshot()
     }
 
     /**
@@ -371,10 +308,12 @@ class GameController(
      * Execute the reinforcement phase for all players
      */
     fun executeReinforcementPhase() {
+        if (!canMutateGame()) return
         val currentState = _gameState.value
         if (currentState.gamePhase != GamePhase.REINFORCEMENT) return
 
         val messages = mutableListOf<String>()
+        val reinforcementResults = mutableListOf<RecordedReinforcementResult>()
 
         // Reinforce all non-eliminated players
         for (playerId in 0 until currentState.map.playerCount) {
@@ -384,18 +323,26 @@ class GameController(
             val playerState = currentState.players[playerId]
             val reinforcements = GameLogic.calculateReinforcements(currentState.map, playerId)
 
-            val newReserve = GameLogic.distributeReinforcements(
+            val distribution = GameLogic.distributeReinforcementsWithLog(
                 currentState.map,
                 playerId,
                 reinforcements,
                 playerState.reserveArmies
             )
 
-            playerState.reserveArmies = newReserve
+            playerState.reserveArmies = distribution.reserveArmies
             GameLogic.updatePlayerState(currentState.map, playerState, playerId)
 
             messages.add("${playerLabel(playerId, gameMode)}: +$reinforcements armies" +
-                if (newReserve > 0) " (Reserve: $newReserve)" else "")
+                if (distribution.reserveArmies > 0) " (Reserve: ${distribution.reserveArmies})" else "")
+
+            reinforcementResults.add(
+                RecordedReinforcementResult(
+                    playerId = playerId,
+                    territoryIncrements = distribution.territoryIncrements,
+                    reserveArmies = distribution.reserveArmies
+                )
+            )
         }
 
         _uiState.value = _uiState.value.copy(
@@ -410,6 +357,8 @@ class GameController(
                 currentState.players[playerId].copy()
             }
         )
+        recordAction(RecordedEvent.Reinforcement(players = reinforcementResults))
+        recordSnapshot()
     }
 
     /**
@@ -418,6 +367,9 @@ class GameController(
     fun newGame(map: GameMap) {
         _gameState.value = createInitialGameState(map)
         _uiState.value = GameUiState(message = "New game started! ${playerLabel(_gameState.value.currentPlayerIndex, gameMode)} goes first.")
+        _replayMode.value = false
+        recordingEnabled = true
+        resetHistory()
     }
 
     /**
@@ -434,6 +386,7 @@ class GameController(
      * Human player selects a territory (for attack)
      */
     fun selectTerritory(territoryId: Int) {
+        if (!canMutateGame()) return
         val currentState = _gameState.value
         val currentUiState = _uiState.value
 
@@ -520,10 +473,269 @@ class GameController(
      * Cancel the current territory selection
      */
     fun cancelSelection() {
+        if (!canMutateGame()) return
         _uiState.value = _uiState.value.copy(
             selectedTerritoryId = null,
             errorMessage = null,
             message = "Selection cancelled"
         )
+    }
+
+    fun undo() {
+        if (undoStack.size <= 1) return
+        val current = undoStack.removeLast()
+        redoStack.addLast(current)
+        val previous = undoStack.last()
+        applySnapshot(previous)
+        updatePlaybackInfo()
+    }
+
+    fun redo() {
+        if (redoStack.isEmpty()) return
+        val next = redoStack.removeLast()
+        undoStack.addLast(next)
+        applySnapshot(next)
+        updatePlaybackInfo()
+    }
+
+    fun canUndo(): Boolean = undoStack.size > 1
+
+    fun canRedo(): Boolean = redoStack.isNotEmpty()
+
+    fun exportRecordingJson(): String {
+        val recordedStart = recordingStartSnapshot.deepCopy().toRecordedSnapshot()
+        val recordedEventList = recordedEvents.toList()
+        val recording = RecordedGame(
+            gameMode = gameMode,
+            humanPlayerId = humanPlayerId,
+            initialSnapshot = recordedStart,
+            events = recordedEventList
+        )
+        return RecordingSerializer.encode(recording)
+    }
+
+    fun importRecordingJson(json: String): Boolean {
+        val recording = try {
+            RecordingSerializer.decode(json)
+        } catch (ex: Exception) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Recording file is invalid.")
+            return false
+        }
+
+        if (recording.gameMode != gameMode || recording.humanPlayerId != humanPlayerId) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Recording does not match this game mode.")
+            return false
+        }
+
+        val snapshots = if (recording.initialSnapshot != null) {
+            RecordingReplayer.buildSnapshots(recording)
+        } else if (recording.snapshots.isNotEmpty()) {
+            recording.snapshots.map { it.toGameSnapshot().deepCopy() }
+        } else {
+            emptyList()
+        }
+
+        if (snapshots.isEmpty()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Recording has no replay data.")
+            return false
+        }
+
+        undoStack.clear()
+        redoStack.clear()
+        undoStack.addLast(snapshots.first())
+        redoStack.addAll(snapshots.drop(1).asReversed())
+        applySnapshot(undoStack.last())
+        updatePlaybackInfo()
+        _replayMode.value = true
+        recordingEnabled = false
+        _uiState.value = _uiState.value.copy(
+            message = "Recording loaded. Use Undo/Redo to step through.",
+            errorMessage = null
+        )
+        return true
+    }
+
+    fun seekToIndex(index: Int) {
+        if (!_replayMode.value) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Playback controls are only available in replay mode.")
+            return
+        }
+
+        val maxIndex = playbackTimelineSize() - 1
+        val target = index.coerceIn(0, maxIndex)
+        var current = undoStack.size - 1
+
+        while (current < target && redoStack.isNotEmpty()) {
+            undoStack.addLast(redoStack.removeLast())
+            current++
+        }
+
+        while (current > target && undoStack.size > 1) {
+            redoStack.addLast(undoStack.removeLast())
+            current--
+        }
+
+        applySnapshot(undoStack.last())
+        updatePlaybackInfo()
+    }
+
+    fun setMessage(message: String?) {
+        _uiState.value = _uiState.value.copy(message = message, errorMessage = null)
+    }
+
+    fun setErrorMessage(message: String?) {
+        _uiState.value = _uiState.value.copy(errorMessage = message)
+    }
+
+    private fun resetHistory() {
+        undoStack.clear()
+        redoStack.clear()
+        recordedEvents.clear()
+        recordingStartSnapshot = captureSnapshot()
+        recordSnapshot()
+    }
+
+    private fun recordSnapshot() {
+        val snapshot = captureSnapshot()
+        undoStack.addLast(snapshot)
+        redoStack.clear()
+        updatePlaybackInfo()
+    }
+
+    private fun captureSnapshot(): GameSnapshot = GameSnapshot(
+        gameState = _gameState.value.deepCopy(),
+        uiState = _uiState.value.deepCopy()
+    )
+
+    private fun applySnapshot(snapshot: GameSnapshot) {
+        val copy = snapshot.deepCopy()
+        _gameState.value = copy.gameState
+        _uiState.value = copy.uiState
+    }
+
+    private fun updatePlaybackInfo() {
+        val total = playbackTimelineSize()
+        val index = (undoStack.size - 1).coerceIn(0, maxOf(0, total - 1))
+        _playbackInfo.value = PlaybackInfo(index = index, total = total)
+    }
+
+    private fun playbackTimelineSize(): Int = undoStack.size + redoStack.size
+
+    private fun canMutateGame(): Boolean {
+        if (!_replayMode.value) {
+            return true
+        }
+        _uiState.value = _uiState.value.copy(errorMessage = "Replay mode is read-only.")
+        return false
+    }
+
+    private fun recordAction(event: RecordedEvent) {
+        if (!recordingEnabled) return
+        val currentIndex = undoStack.size - 1
+        while (recordedEvents.size > currentIndex) {
+            recordedEvents.removeLast()
+        }
+        recordedEvents.addLast(event)
+    }
+
+    private fun applyAttackOutcome(
+        fromTerritoryId: Int,
+        toTerritoryId: Int,
+        combatResult: CombatResult,
+        mutateMap: Boolean
+    ) {
+        val currentGameState = _gameState.value
+        val fromTerritory = currentGameState.map.territories.getOrNull(fromTerritoryId) ?: return
+        val toTerritory = currentGameState.map.territories.getOrNull(toTerritoryId) ?: return
+
+        if (mutateMap) {
+            GameLogic.applyAttackResult(fromTerritory, toTerritory, combatResult)
+        }
+
+        val attackerPlayerId = combatResult.attackerPlayerId
+        val defenderPlayerId = combatResult.defenderPlayerId
+        val isBotAttack = isCurrentPlayerBot()
+
+        if (combatResult.attackerWins) {
+            val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
+            debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
+            _uiState.value = _uiState.value.copy(
+                playerCombatResults = updatedCombatResults,
+                skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,
+                message = "${playerLabel(currentGameState.currentPlayerIndex, gameMode)} wins! " +
+                    "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
+                    "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
+                botAttackArrows = if (isBotAttack) {
+                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
+                } else {
+                    emptyList()
+                }
+            )
+        } else {
+            val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
+            debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
+            _uiState.value = _uiState.value.copy(
+                playerCombatResults = updatedCombatResults,
+                skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,
+                message = "${playerLabel(toTerritory.owner, gameMode)} defends! " +
+                    "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
+                    "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
+                botAttackArrows = if (isBotAttack) {
+                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
+                } else {
+                    emptyList()
+                }
+            )
+        }
+
+        for (playerId in 0 until currentGameState.map.playerCount) {
+            GameLogic.updatePlayerState(currentGameState.map, currentGameState.players[playerId], playerId)
+        }
+
+        val updatedPlayers = Array(currentGameState.map.playerCount) { playerId ->
+            currentGameState.players[playerId].copy()
+        }
+
+        var eliminatedPlayers = currentGameState.eliminatedPlayers
+        if (updatedPlayers[defenderPlayerId].territoryCount == 0) {
+            eliminatedPlayers = eliminatedPlayers + defenderPlayerId
+            debugLog { "DEBUG: Player $defenderPlayerId eliminated!" }
+        }
+
+        if (gameMode == GameMode.HUMAN_VS_BOT && humanPlayerId in eliminatedPlayers) {
+            _gameState.value = _gameState.value.copy(
+                gamePhase = GamePhase.GAME_OVER,
+                winner = null,
+                players = updatedPlayers,
+                eliminatedPlayers = eliminatedPlayers
+            )
+            _uiState.value = _uiState.value.copy(
+                message = "💀 ${playerLabel(humanPlayerId, gameMode)} eliminated! Game Over."
+            )
+            return
+        }
+
+        val remainingPlayers = (0 until currentGameState.map.playerCount).filter { it !in eliminatedPlayers }
+        if (remainingPlayers.size == 1) {
+            val winner = remainingPlayers[0]
+            _gameState.value = _gameState.value.copy(
+                winner = winner,
+                gamePhase = GamePhase.GAME_OVER,
+                players = updatedPlayers,
+                eliminatedPlayers = eliminatedPlayers
+            )
+            _uiState.value = _uiState.value.copy(
+                message = "🎉 ${playerLabel(winner, gameMode)} wins the game! 🎉"
+            )
+            return
+        }
+
+        _gameState.value = _gameState.value.copy(
+            skipTracker = emptySet(),
+            eliminatedPlayers = eliminatedPlayers,
+            players = updatedPlayers
+        )
+
+        nextPlayer()
     }
 }

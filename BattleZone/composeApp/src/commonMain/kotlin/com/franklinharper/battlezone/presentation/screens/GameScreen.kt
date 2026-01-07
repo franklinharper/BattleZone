@@ -8,6 +8,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -17,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,17 +37,36 @@ import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
 import com.franklinharper.battlezone.playerLabel
 import com.franklinharper.battlezone.debugLog
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * Main game screen showing the map and controls
  */
+enum class GameScreenMode {
+    PLAY,
+    PLAYBACK
+}
+
 @Composable
-fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () -> Unit) {
+fun GameScreen(
+    viewModel: GameViewModel,
+    gameMode: GameMode,
+    onBackToMenu: () -> Unit,
+    screenMode: GameScreenMode = GameScreenMode.PLAY
+) {
     // Collect state from StateFlows
     val gameState by viewModel.gameState.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val replayMode by viewModel.replayMode.collectAsState()
+    val playbackInfo by viewModel.playbackInfo.collectAsState()
 
     val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
+    val allowInput = !replayMode
+    val filePicker = rememberRecordingFilePicker()
+    val coroutineScope = rememberCoroutineScope()
+    var isPlaying by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableStateOf(UiConstants.PLAYBACK_SPEED_NORMAL) }
 
     // Show overlay while in reinforcement phase
     val showReinforcementOverlay = gameState.gamePhase == GamePhase.REINFORCEMENT
@@ -59,9 +81,24 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
         }
     }
 
+    LaunchedEffect(isPlaying, playbackInfo.index, playbackInfo.total, playbackSpeed) {
+        if (screenMode != GameScreenMode.PLAYBACK) return@LaunchedEffect
+        if (!isPlaying) return@LaunchedEffect
+        if (playbackInfo.total <= 1) return@LaunchedEffect
+
+        val lastIndex = playbackInfo.total - 1
+        if (playbackInfo.index >= lastIndex) {
+            isPlaying = false
+            return@LaunchedEffect
+        }
+
+        kotlinx.coroutines.delay((UiConstants.PLAYBACK_STEP_DELAY_MS / playbackSpeed).toLong())
+        viewModel.seekToPlaybackIndex(playbackInfo.index + 1)
+    }
+
     // Create a stable click handler
-    val territoryClickHandler = remember(gameMode) {
-        if (gameMode == GameMode.HUMAN_VS_BOT) {
+    val territoryClickHandler = remember(gameMode, allowInput) {
+        if (gameMode == GameMode.HUMAN_VS_BOT && allowInput) {
             { territoryId: Int ->
                 debugLog { "Territory clicked: $territoryId, Current player: ${viewModel.getCurrentPlayer()}, Is human turn: ${viewModel.isCurrentPlayerHuman()}" }
                 viewModel.selectTerritory(territoryId)
@@ -98,8 +135,14 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+        val titleText = when {
+            screenMode == GameScreenMode.PLAYBACK && isHumanVsBot -> "BattleZone Playback - Human vs Bot"
+            screenMode == GameScreenMode.PLAYBACK -> "BattleZone Playback - Bot vs Bot"
+            isHumanVsBot -> "BattleZone - Human vs Bot"
+            else -> "BattleZone - Bot vs Bot"
+        }
         Text(
-            if (isHumanVsBot) "BattleZone - Human vs Bot" else "BattleZone - Bot vs Bot",
+            titleText,
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(8.dp)
         )
@@ -110,37 +153,129 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(8.dp)
         ) {
-            Button(onClick = onBackToMenu) {
-                Text("← Back to Menu")
-            }
+            when (screenMode) {
+                GameScreenMode.PLAY -> {
+                    Button(onClick = onBackToMenu) {
+                        Text("← Back to Menu")
+                    }
 
-            Button(
-                onClick = {
-                    val newMap = MapGenerator.generate(playerCount = gameState.map.playerCount)
-                    viewModel.newGame(newMap)
+                    Button(
+                        onClick = {
+                            val newMap = MapGenerator.generate(playerCount = gameState.map.playerCount)
+                            viewModel.newGame(newMap)
+                        }
+                    ) {
+                        Text("New Game")
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("Debug")
+                        Switch(
+                            checked = debugModeEnabled,
+                            onCheckedChange = { enabled ->
+                                debugModeEnabled = enabled
+                                DebugFlags.enableLogs = enabled
+                                if (!enabled) {
+                                    debugCellIndex = null
+                                }
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    val undoLabel = if (replayMode) "Previous" else "Undo"
+                    val redoLabel = if (replayMode) "Next" else "Redo"
+
+                    Button(
+                        onClick = { viewModel.undo() },
+                        enabled = viewModel.canUndo()
+                    ) {
+                        Text(undoLabel)
+                    }
+
+                    Button(
+                        onClick = { viewModel.redo() },
+                        enabled = viewModel.canRedo()
+                    ) {
+                        Text(redoLabel)
+                    }
+
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val json = viewModel.exportRecordingJson()
+                                val success = filePicker.saveRecording(json)
+                                if (success) {
+                                    viewModel.setMessage("Recording saved.")
+                                } else {
+                                    viewModel.setMessage("Recording save cancelled.")
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Save Recording")
+                    }
                 }
-            ) {
-                Text("New Game")
-            }
+                GameScreenMode.PLAYBACK -> {
+                    Button(onClick = onBackToMenu) {
+                        Text("← Back to Menu")
+                    }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text("Debug")
-                Switch(
-                    checked = debugModeEnabled,
-                    onCheckedChange = { enabled ->
-                        debugModeEnabled = enabled
-                        DebugFlags.enableLogs = enabled
-                        if (!enabled) {
-                            debugCellIndex = null
+                    Button(
+                        onClick = { isPlaying = !isPlaying },
+                        enabled = playbackInfo.total > 1
+                    ) {
+                        Text(if (isPlaying) "Pause" else "Play")
+                    }
+
+                    Button(
+                        onClick = { viewModel.seekToPlaybackIndex(playbackInfo.index - 1) },
+                        enabled = playbackInfo.index > 0
+                    ) {
+                        Text("Step")
+                    }
+
+                    Button(
+                        onClick = { viewModel.seekToPlaybackIndex(playbackInfo.index + 1) },
+                        enabled = playbackInfo.index < playbackInfo.total - 1
+                    ) {
+                        Text("Next")
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Text("Speed")
+
+                    val speedOptions = listOf(
+                        UiConstants.PLAYBACK_SPEED_HALF to "0.5x",
+                        UiConstants.PLAYBACK_SPEED_NORMAL to "1x",
+                        UiConstants.PLAYBACK_SPEED_DOUBLE to "2x"
+                    )
+                    speedOptions.forEach { (speed, label) ->
+                        val selected = playbackSpeed == speed
+                        val buttonModifier = Modifier.padding(start = 4.dp)
+                        if (selected) {
+                            Button(
+                                onClick = { playbackSpeed = speed },
+                                modifier = buttonModifier
+                            ) {
+                                Text(label)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { playbackSpeed = speed },
+                                modifier = buttonModifier
+                            ) {
+                                Text(label)
+                            }
                         }
                     }
-                )
+                }
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             if (debugModeEnabled) {
                 Row(
@@ -175,6 +310,43 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                         )
                     }
                 }
+            }
+        }
+
+        val statusMessage = uiState.errorMessage ?: uiState.message
+        if (statusMessage != null) {
+            Text(
+                text = statusMessage,
+                color = if (uiState.errorMessage != null) GameColors.UiTextError else GameColors.UiTextMuted,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+
+        if (screenMode == GameScreenMode.PLAYBACK) {
+            val maxIndex = (playbackInfo.total - 1).coerceAtLeast(0)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "${(playbackInfo.index + 1).coerceAtMost(playbackInfo.total)}/${playbackInfo.total}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Slider(
+                    value = playbackInfo.index.toFloat().coerceIn(0f, maxIndex.toFloat()),
+                    valueRange = 0f..maxIndex.toFloat(),
+                    onValueChange = { value ->
+                        isPlaying = false
+                        viewModel.seekToPlaybackIndex(value.roundToInt())
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -277,6 +449,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 val showActionButton = when {
                     viewModel.isGameOver() -> false
                     gameState.gamePhase == GamePhase.REINFORCEMENT -> false
+                    replayMode -> false
                     viewModel.isCurrentPlayerHuman() -> true
                     viewModel.isCurrentPlayerBot() && gameMode == GameMode.BOT_VS_BOT -> true
                     else -> false
@@ -321,6 +494,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                         for (playerId in 0 until gameState.map.playerCount) {
                             val playerState = gameState.players[playerId]
                             val isEliminated = playerId in gameState.eliminatedPlayers
+                            if (isEliminated) continue
                             val playerColor = GameColors.getPlayerColor(playerId)
 
                             val label = playerLabel(playerId, gameMode)
