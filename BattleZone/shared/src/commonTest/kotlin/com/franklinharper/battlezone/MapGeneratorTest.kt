@@ -10,6 +10,11 @@ import kotlin.test.assertNotNull
  * Tests for MapGenerator to verify behavior matches legacy JavaScript implementation
  */
 class MapGeneratorTest {
+    private companion object {
+        private const val TARGET_SEED = -8142904478512163211L
+        private const val TARGET_TERRITORY_ID = 17
+        private const val EXPECTED_CENTER_POS = 552
+    }
 
     @Test
     fun testMapGenerationWithSeed() {
@@ -271,6 +276,17 @@ class MapGeneratorTest {
                 "Territory ${territory.id} center should be at max distance from border"
             )
         }
+    }
+
+    @Test
+    fun testTerritoryCenterPosForSeedAndTerritoryId() {
+        val map = MapGenerator.generate(seed = TARGET_SEED)
+        val territory = map.territories[TARGET_TERRITORY_ID]
+        assertEquals(
+            EXPECTED_CENTER_POS,
+            territory.centerPos,
+            "Territory $TARGET_TERRITORY_ID centerPos should match expected value for seed $TARGET_SEED"
+        )
     }
 
     @Test

@@ -13,6 +13,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -85,7 +86,20 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     var mapWidth by remember { mutableStateOf(0.dp) }
     var mapWidthPx by remember { mutableStateOf(0f) }
     var debugModeEnabled by remember { mutableStateOf(false) }
+    var seedText by remember { mutableStateOf("") }
     val clipboardManager = LocalClipboardManager.current
+    val applySeed: () -> Unit = applySeed@{
+        val parsedSeed = seedText.trim().toLongOrNull() ?: return@applySeed
+        val newMap = MapGenerator.generate(
+            seed = parsedSeed,
+            playerCount = gameState.map.playerCount
+        )
+        viewModel.newGame(newMap)
+    }
+
+    LaunchedEffect(gameState.map.seed) {
+        seedText = gameState.map.seed?.toString().orEmpty()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -134,17 +148,25 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
             Spacer(modifier = Modifier.weight(1f))
 
             if (debugModeEnabled) {
-                val seedLabel = gameState.map.seed?.toString() ?: "unknown"
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "Seed: $seedLabel",
+                        text = "Seed:",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    TextField(
+                        value = seedText,
+                        onValueChange = { seedText = it },
+                        singleLine = true,
+                        modifier = Modifier.width(SEED_FIELD_WIDTH)
+                    )
+                    Button(onClick = applySeed) {
+                        Text("Apply")
+                    }
                     IconButton(
-                        onClick = { clipboardManager.setText(AnnotatedString(seedLabel)) }
+                        onClick = { clipboardManager.setText(AnnotatedString(seedText)) }
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ContentCopy,
@@ -479,6 +501,7 @@ private val PLAYER_LABEL_BORDER_WIDTH = 1.dp
 private val PLAYER_LABEL_BORDER_COLOR = Color.Black.copy(alpha = PLAYER_LABEL_BORDER_ALPHA)
 private val PLAYER_LABEL_CONTENT_SPACING = 8.dp
 private val ACTION_BUTTON_RESERVE_WIDTH = 190.dp
+private val SEED_FIELD_WIDTH = 240.dp
 
 /**
  * Calculate optimal cell dimensions to fit the map within available space
