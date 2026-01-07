@@ -12,6 +12,7 @@ import kotlin.math.max
 
 // Constants for rendering
 private const val ORIGINAL_CELL_WIDTH = 27f
+private const val HEX_EDGE_COUNT = 6
 
 /**
  * Handles all territory-specific rendering operations.
@@ -44,6 +45,32 @@ object TerritoryDrawer {
                     path = hexPath,
                     color = fillColor,
                     style = Fill
+                )
+            }
+        }
+    }
+
+    /**
+     * Draw debug outlines for every hex cell.
+     */
+    fun DrawScope.drawCellOutlines(
+        map: GameMap,
+        cellWidth: Float,
+        cellHeight: Float,
+        getCellPosition: (Int) -> Pair<Float, Float>
+    ) {
+        val strokeWidth = max(0.5f, cellWidth / ORIGINAL_CELL_WIDTH)
+        for (i in map.cells.indices) {
+            val (cellX, cellY) = getCellPosition(i)
+            for (dir in 0 until HEX_EDGE_COUNT) {
+                drawHexEdge(
+                    cellX,
+                    cellY,
+                    cellWidth,
+                    cellHeight,
+                    dir,
+                    GameColors.DebugCellOutline,
+                    strokeWidth
                 )
             }
         }

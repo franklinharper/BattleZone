@@ -87,6 +87,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
     var mapWidthPx by remember { mutableStateOf(0f) }
     var debugModeEnabled by remember { mutableStateOf(false) }
     var seedText by remember { mutableStateOf("") }
+    var debugCellIndex by remember { mutableStateOf<Int?>(null) }
     val clipboardManager = LocalClipboardManager.current
     val applySeed: () -> Unit = applySeed@{
         val parsedSeed = seedText.trim().toLongOrNull() ?: return@applySeed
@@ -127,7 +128,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
 
             Button(
                 onClick = {
-                    val newMap = MapGenerator.generate()
+                    val newMap = MapGenerator.generate(playerCount = gameState.map.playerCount)
                     viewModel.newGame(newMap)
                 }
             ) {
@@ -141,7 +142,12 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                 Text("Debug")
                 Switch(
                     checked = debugModeEnabled,
-                    onCheckedChange = { debugModeEnabled = it }
+                    onCheckedChange = { enabled ->
+                        debugModeEnabled = enabled
+                        if (!enabled) {
+                            debugCellIndex = null
+                        }
+                    }
                 )
             }
 
@@ -171,6 +177,12 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                         Icon(
                             imageVector = Icons.Filled.ContentCopy,
                             contentDescription = "Copy seed"
+                        )
+                    }
+                    debugCellIndex?.let { cellIndex ->
+                        Text(
+                            text = "Cell: $cellIndex",
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -230,6 +242,7 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                 cellHeight = renderParams.cellHeight,
                                 fontSize = renderParams.fontSize,
                                 showTerritoryIds = debugModeEnabled,
+                                showCellOutlines = debugModeEnabled,
                                 highlightedTerritories = when {
                                     uiState.currentBotDecision is BotDecision.Attack -> {
                                         val decision = uiState.currentBotDecision as BotDecision.Attack
@@ -244,7 +257,12 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                     is BotDecision.Attack -> decision.fromTerritoryId
                                     else -> uiState.selectedTerritoryId
                                 },
-                                onTerritoryClick = territoryClickHandler
+                                onTerritoryClick = territoryClickHandler,
+                                onCellClick = if (debugModeEnabled) {
+                                    { cellIndex -> debugCellIndex = cellIndex }
+                                } else {
+                                    null
+                                }
                             )
 
                             // Bot attack arrows overlay (does not block clicks) - show all bot attacks

@@ -58,6 +58,11 @@ object GameColors {
     val TerritoryText = Color.Black
 
     /**
+     * Debug outline color for individual hex cells
+     */
+    val DebugCellOutline = Color(0xFFCCCCCC)
+
+    /**
      * Get the color for a specific player ID
      */
     fun getPlayerColor(playerId: Int): Color = when (playerId) {

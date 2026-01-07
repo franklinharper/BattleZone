@@ -15,7 +15,8 @@ Write idiomatic Kotlin code, and prefer a functional style where it makes sense.
 ## Agent instructions
 
 Ask before commiting to  git.
-Use symbolic constants instead of magic numbers. Especially for colors.
+In app code use symbolic constants instead of magic numbers. Especially for colors.
+In test code use hard-coded constants instead.
 Always run all tests (`./gradlew test`) at the end of any code updates.
 
 ## Architecture
