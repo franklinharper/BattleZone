@@ -16,6 +16,7 @@ import com.franklinharper.battlezone.CombatResult
 import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMode
 import com.franklinharper.battlezone.PlayerState
+import com.franklinharper.battlezone.presentation.playerLabel
 
 /**
  * Display statistics for a single player
@@ -94,10 +95,7 @@ fun PlayerStatsDisplay(
             )
         } else {
             combatResult?.let { combat ->
-                val defenderLabel = when (gameMode) {
-                    GameMode.HUMAN_VS_BOT -> if (combat.defenderPlayerId == 0) "Human" else "Bot ${combat.defenderPlayerId}"
-                    GameMode.BOT_VS_BOT -> "Bot ${combat.defenderPlayerId + 1}"
-                }
+                val defenderLabel = playerLabel(combat.defenderPlayerId, gameMode)
 
                 val resultEmoji = if (combat.attackerWins) "✅" else "❌"
                 val resultText = if (combat.attackerWins) "win" else "fail"

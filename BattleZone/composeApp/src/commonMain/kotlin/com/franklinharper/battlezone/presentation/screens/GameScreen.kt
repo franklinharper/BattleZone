@@ -1,10 +1,12 @@
 package com.franklinharper.battlezone.presentation.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,12 +22,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.franklinharper.battlezone.*
 import com.franklinharper.battlezone.presentation.components.BotAttackArrowOverlay
 import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
+import com.franklinharper.battlezone.presentation.playerLabel
 
 /**
  * Main game screen showing the map and controls
@@ -245,20 +249,27 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                             val isEliminated = playerId in gameState.eliminatedPlayers
                             val playerColor = GameColors.getPlayerColor(playerId)
 
-                            val label = when (gameMode) {
-                                GameMode.HUMAN_VS_BOT -> if (playerId == 0) "Human" else "Bot $playerId"
-                                GameMode.BOT_VS_BOT -> "Bot ${playerId + 1}"
-                            }
+                            val label = playerLabel(playerId, gameMode)
 
                             // Player entry (kept together as a unit)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Colored box with player name
-                                Box(
+                                // Colored box with player name + reinforcements count.
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(PLAYER_LABEL_CONTENT_SPACING),
                                     modifier = Modifier
-                                        .background(playerColor)
+                                        .background(
+                                            color = playerColor,
+                                            shape = PLAYER_LABEL_SHAPE
+                                        )
+                                        .border(
+                                            width = PLAYER_LABEL_BORDER_WIDTH,
+                                            color = PLAYER_LABEL_BORDER_COLOR,
+                                            shape = PLAYER_LABEL_SHAPE
+                                        )
                                         .padding(
                                             horizontal = labelPaddingHorizontal,
                                             vertical = labelPaddingVertical
@@ -269,14 +280,13 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                         color = Color.Black,
                                         fontSize = labelFontSize
                                     )
+                                    Text(
+                                        text = playerState.largestConnectedSize.toString(),
+                                        color = Color.Black,
+                                        fontSize = numberFontSize,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
-
-                                // Connected count (outside the box)
-                                Text(
-                                    text = playerState.largestConnectedSize.toString(),
-                                    color = Color.Black,
-                                    fontSize = numberFontSize
-                                )
                             }
                         }
                     }
@@ -304,7 +314,10 @@ fun GameScreen(viewModel: GameViewModel, gameMode: GameMode, onBackToMenu: () ->
                                             onClick = { viewModel.requestBotDecision() },
                                             modifier = Modifier.padding(start = 12.dp)
                                         ) {
-                                            Text("Player ${viewModel.getCurrentPlayer()}: Make Decision", fontSize = buttonFontSize)
+                                            Text(
+                                                "${playerLabel(viewModel.getCurrentPlayer(), gameMode)}: Make Decision",
+                                                fontSize = buttonFontSize
+                                            )
                                         }
                                     }
                                     uiState.currentBotDecision is BotDecision.Attack -> {
@@ -414,6 +427,12 @@ private const val MAX_BOTTOM_ROW_FONT_SIZE = 28f
 private const val PLAYER_LABEL_FONT_DIVISOR = 6f
 private const val LABEL_HORIZONTAL_PADDING_SCALE = 0.6f
 private const val LABEL_VERTICAL_PADDING_SCALE = 0.3f
+private const val PLAYER_LABEL_BORDER_ALPHA = 0.4f
+private val PLAYER_LABEL_CORNER_RADIUS = 6.dp
+private val PLAYER_LABEL_SHAPE = RoundedCornerShape(PLAYER_LABEL_CORNER_RADIUS)
+private val PLAYER_LABEL_BORDER_WIDTH = 1.dp
+private val PLAYER_LABEL_BORDER_COLOR = Color.Black.copy(alpha = PLAYER_LABEL_BORDER_ALPHA)
+private val PLAYER_LABEL_CONTENT_SPACING = 8.dp
 private val ACTION_BUTTON_RESERVE_WIDTH = 190.dp
 
 /**
