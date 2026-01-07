@@ -12,9 +12,11 @@ The `BattleZone` folder contains the code for a kotlin multiplatform game that i
 
 Write idiomatic Kotlin code, and prefer a functional style where it makes sense.
 
-Ask before commiting to  git.
+## Agent instructions
 
+Ask before commiting to  git.
 Use symbolic constants instead of magic numbers. Especially for colors.
+Always run all tests (`./gradlew test`) at the end of any code updates.
 
 ## Architecture
 
@@ -84,7 +86,6 @@ All commands must be run from the `BattleZone` directory.
 ./gradlew :shared:jvmTest
 ./gradlew :shared:androidUnitTest
 ```
-
 ### Other Commands
 ```bash
 # Clean build
