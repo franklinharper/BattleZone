@@ -1,6 +1,4 @@
-package com.franklinharper.battlezone.presentation
-
-import com.franklinharper.battlezone.GameMode
+package com.franklinharper.battlezone
 
 fun playerLabel(playerId: Int, gameMode: GameMode): String =
     when (gameMode) {

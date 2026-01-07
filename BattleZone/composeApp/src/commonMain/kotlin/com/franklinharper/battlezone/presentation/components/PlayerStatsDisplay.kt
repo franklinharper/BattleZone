@@ -17,7 +17,7 @@ import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMode
 import com.franklinharper.battlezone.PlayerState
 import com.franklinharper.battlezone.debugLog
-import com.franklinharper.battlezone.presentation.playerLabel
+import com.franklinharper.battlezone.playerLabel
 
 /**
  * Display statistics for a single player

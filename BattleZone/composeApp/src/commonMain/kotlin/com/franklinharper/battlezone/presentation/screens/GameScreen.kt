@@ -32,7 +32,7 @@ import com.franklinharper.battlezone.*
 import com.franklinharper.battlezone.presentation.components.BotAttackArrowOverlay
 import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
-import com.franklinharper.battlezone.presentation.playerLabel
+import com.franklinharper.battlezone.playerLabel
 import com.franklinharper.battlezone.debugLog
 
 /**

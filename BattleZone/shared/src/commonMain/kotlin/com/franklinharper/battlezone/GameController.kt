@@ -102,17 +102,6 @@ class GameController(
     }
 
     /**
-     * Get player label for display
-     */
-    private fun getPlayerLabel(playerId: Int): String {
-        return if (gameMode == GameMode.HUMAN_VS_BOT) {
-            if (playerId == humanPlayerId) "Human" else "Bot"
-        } else {
-            "Player $playerId"
-        }
-    }
-
-    /**
      * Create initial game state from a generated map
      */
     private fun createInitialGameState(map: GameMap): GameState {
@@ -158,8 +147,8 @@ class GameController(
         _uiState.value = _uiState.value.copy(
             currentBotDecision = decision,
             message = when (decision) {
-                is BotDecision.Attack -> "${getPlayerLabel(currentPlayer)} attacks: Territory ${decision.fromTerritoryId} → ${decision.toTerritoryId}"
-                is BotDecision.Skip -> "${getPlayerLabel(currentPlayer)} skips their turn"
+                is BotDecision.Attack -> "${playerLabel(currentPlayer, gameMode)} attacks: Territory ${decision.fromTerritoryId} → ${decision.toTerritoryId}"
+                is BotDecision.Skip -> "${playerLabel(currentPlayer, gameMode)} skips their turn"
             }
         )
     }
@@ -207,7 +196,7 @@ class GameController(
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
-                message = "${getPlayerLabel(currentGameState.currentPlayerIndex)} wins! " +
+                message = "${playerLabel(currentGameState.currentPlayerIndex, gameMode)} wins! " +
                         "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                         "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 botAttackArrows = if (isBotAttack) {
@@ -223,7 +212,7 @@ class GameController(
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,  // Remove from skipped when attacking
-                message = "${getPlayerLabel(toTerritory.owner)} defends! " +
+                message = "${playerLabel(toTerritory.owner, gameMode)} defends! " +
                         "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                         "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 botAttackArrows = if (isBotAttack) {
@@ -264,7 +253,7 @@ class GameController(
                 eliminatedPlayers = eliminatedPlayers
             )
             _uiState.value = _uiState.value.copy(
-                message = "💀 Human eliminated! Game Over."
+                message = "💀 ${playerLabel(humanPlayerId, gameMode)} eliminated! Game Over."
             )
             return
         }
@@ -280,7 +269,7 @@ class GameController(
                 eliminatedPlayers = eliminatedPlayers
             )
             _uiState.value = _uiState.value.copy(
-                message = "🎉 ${getPlayerLabel(winner)} wins the game! 🎉"
+                message = "🎉 ${playerLabel(winner, gameMode)} wins the game! 🎉"
             )
             return
         }
@@ -311,7 +300,7 @@ class GameController(
         val skipCount = (updatedSkipTracker - currentState.eliminatedPlayers).size
 
         _uiState.value = _uiState.value.copy(
-            message = "${getPlayerLabel(currentPlayer)} skipped. ($skipCount/$activePlayerCount players skipped)",
+            message = "${playerLabel(currentPlayer, gameMode)} skipped. ($skipCount/$activePlayerCount players skipped)",
             skippedPlayers = _uiState.value.skippedPlayers + currentPlayer,  // Add to skipped set
             botAttackArrows = if (isCurrentPlayerHuman()) {
                 emptyList()  // Human skip - clear bot arrows from previous round
@@ -361,7 +350,7 @@ class GameController(
                 gamePhase = GamePhase.GAME_OVER
             )
             _uiState.value = _uiState.value.copy(
-                message = "🎉 ${getPlayerLabel(currentPlayer)} wins the game! 🎉"
+                message = "🎉 ${playerLabel(currentPlayer, gameMode)} wins the game! 🎉"
             )
         }
     }
@@ -405,7 +394,7 @@ class GameController(
             playerState.reserveArmies = newReserve
             GameLogic.updatePlayerState(currentState.map, playerState, playerId)
 
-            messages.add("${getPlayerLabel(playerId)}: +$reinforcements armies" +
+            messages.add("${playerLabel(playerId, gameMode)}: +$reinforcements armies" +
                 if (newReserve > 0) " (Reserve: $newReserve)" else "")
         }
 
@@ -428,7 +417,7 @@ class GameController(
      */
     fun newGame(map: GameMap) {
         _gameState.value = createInitialGameState(map)
-        _uiState.value = GameUiState(message = "New game started! ${getPlayerLabel(_gameState.value.currentPlayerIndex)} goes first.")
+        _uiState.value = GameUiState(message = "New game started! ${playerLabel(_gameState.value.currentPlayerIndex, gameMode)} goes first.")
     }
 
     /**
