@@ -3,11 +3,12 @@ package com.franklinharper.battlezone
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.suspendCancellableCoroutine
+import platform.Foundation.NSDate
+import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSData
 import platform.Foundation.NSString
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUTF8StringEncoding
-import platform.Foundation.NSUUID
 import platform.Foundation.URLByAppendingPathComponent
 import platform.Foundation.writeToURL
 import platform.UIKit.UIApplication
@@ -25,7 +26,7 @@ import platform.UIKit.UIWindow
 import platform.darwin.NSObject
 
 private const val RECORDING_DOCUMENT_TYPE = "public.json"
-private const val DEFAULT_RECORDING_FILE_PREFIX = "battlezone-recording"
+private const val RECORDING_FILE_PREFIX = "battlezone"
 
 @Composable
 actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
@@ -111,7 +112,7 @@ private class RecordingDocumentPickerDelegate(
 
 private fun createTempJsonFile(json: String): NSURL? {
     val data = json.encodeToByteArray().toNSData()
-    val fileName = "${DEFAULT_RECORDING_FILE_PREFIX}-${NSUUID().UUIDString}.json"
+    val fileName = "${defaultRecordingFileName()}"
     val directory = NSTemporaryDirectory()
     val url = NSURL.fileURLWithPath(directory).URLByAppendingPathComponent(fileName) ?: return null
     return if (data.writeToURL(url, true)) url else null
@@ -119,6 +120,13 @@ private fun createTempJsonFile(json: String): NSURL? {
 
 private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
     NSData.create(bytes = pinned.addressOf(0), length = size.toULong())
+}
+
+private fun defaultRecordingFileName(): String {
+    val formatter = NSDateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd-HH-mm"
+    val timestamp = formatter.stringFromDate(NSDate())
+    return "$RECORDING_FILE_PREFIX-$timestamp.bzr"
 }
 
 private fun presentPicker(picker: UIDocumentPickerViewController) {

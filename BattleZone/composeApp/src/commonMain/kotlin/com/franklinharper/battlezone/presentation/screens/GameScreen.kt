@@ -236,7 +236,7 @@ fun GameScreen(
                         onClick = { viewModel.seekToPlaybackIndex(playbackInfo.index - 1) },
                         enabled = playbackInfo.index > 0
                     ) {
-                        Text("Step")
+                        Text("Prev")
                     }
 
                     Button(

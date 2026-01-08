@@ -14,9 +14,12 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val RECORDING_MIME_TYPE = "application/json"
-private const val DEFAULT_RECORDING_FILE_NAME = "battlezone-recording.json"
+private const val RECORDING_FILE_PREFIX = "battlezone"
 
 @Composable
 actual fun rememberRecordingFilePicker(): RecordingFilePicker {
@@ -45,7 +48,7 @@ actual fun rememberRecordingFilePicker(): RecordingFilePicker {
             contextProvider = { currentContext },
             launchSave = { deferred ->
                 pendingSave = deferred
-                saveLauncher.launch(DEFAULT_RECORDING_FILE_NAME)
+                saveLauncher.launch(defaultRecordingFileName())
             },
             launchLoad = { deferred ->
                 pendingLoad = deferred
@@ -83,4 +86,10 @@ private class AndroidRecordingFilePicker(
             }
         }
     }
+}
+
+private fun defaultRecordingFileName(): String {
+    val formatter = SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.US)
+    val timestamp = formatter.format(Date())
+    return "$RECORDING_FILE_PREFIX-$timestamp.bzr"
 }

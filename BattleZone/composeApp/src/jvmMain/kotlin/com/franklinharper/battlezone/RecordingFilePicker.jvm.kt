@@ -8,8 +8,10 @@ import kotlinx.coroutines.swing.Swing
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
-private const val DEFAULT_RECORDING_FILE_NAME = "battlezone-recording.json"
+private const val RECORDING_FILE_PREFIX = "battlezone"
 
 @Composable
 actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
@@ -19,7 +21,7 @@ actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
 private class JvmRecordingFilePicker : RecordingFilePicker {
     override suspend fun saveRecording(json: String): Boolean = withContext(Dispatchers.Swing) {
         val dialog = FileDialog(null as Frame?, "Save Recording", FileDialog.SAVE)
-        dialog.file = DEFAULT_RECORDING_FILE_NAME
+        dialog.file = defaultRecordingFileName()
         dialog.isVisible = true
 
         val fileName = dialog.file ?: return@withContext false
@@ -42,4 +44,10 @@ private class JvmRecordingFilePicker : RecordingFilePicker {
             file.takeIf { it.exists() }?.readText()
         }
     }
+}
+
+private fun defaultRecordingFileName(): String {
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm")
+    val timestamp = LocalDateTime.now().format(formatter)
+    return "$RECORDING_FILE_PREFIX-$timestamp.bzr"
 }

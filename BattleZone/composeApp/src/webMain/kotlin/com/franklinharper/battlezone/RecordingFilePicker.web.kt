@@ -12,8 +12,9 @@ import org.w3c.files.FileReader
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.js.Date
 
-private const val DEFAULT_RECORDING_FILE_NAME = "battlezone-recording.json"
+private const val RECORDING_FILE_PREFIX = "battlezone"
 
 @Composable
 actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
@@ -26,7 +27,7 @@ private class WebRecordingFilePicker : RecordingFilePicker {
         val url = window.URL.createObjectURL(blob)
         val anchor = document.createElement("a") as HTMLAnchorElement
         anchor.href = url
-        anchor.download = DEFAULT_RECORDING_FILE_NAME
+        anchor.download = defaultRecordingFileName()
         anchor.click()
         window.URL.revokeObjectURL(url)
         return true
@@ -36,7 +37,7 @@ private class WebRecordingFilePicker : RecordingFilePicker {
         try {
             val input = document.createElement("input") as HTMLInputElement
             input.type = "file"
-            input.accept = "application/json,.json"
+        input.accept = "application/json,.json,.bzr"
             input.onchange = {
                 val file = input.files?.item(0)
                 if (file == null) {
@@ -54,4 +55,14 @@ private class WebRecordingFilePicker : RecordingFilePicker {
             continuation.resumeWithException(ex)
         }
     }
+}
+
+private fun defaultRecordingFileName(): String {
+    val date = Date()
+    val year = date.getFullYear().toString().padStart(4, '0')
+    val month = (date.getMonth() + 1).toString().padStart(2, '0')
+    val day = date.getDate().toString().padStart(2, '0')
+    val hour = date.getHours().toString().padStart(2, '0')
+    val minute = date.getMinutes().toString().padStart(2, '0')
+    return "$RECORDING_FILE_PREFIX-$year-$month-$day-$hour-$minute.bzr"
 }
