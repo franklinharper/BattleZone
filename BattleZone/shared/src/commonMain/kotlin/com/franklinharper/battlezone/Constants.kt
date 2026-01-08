@@ -3,6 +3,10 @@ package com.franklinharper.battlezone
 const val SERVER_PORT = 8080
 const val MIN_PLAYERS = 2
 const val MAX_PLAYERS = 8
+const val REALTIME_ROUND_TIMER_MIN_SECONDS = 1
+const val REALTIME_ROUND_TIMER_MAX_SECONDS = 30
+const val DEFAULT_REALTIME_ROUND_TIMER_SECONDS = 5
+const val MILLIS_PER_SECOND = 1000L
 
 object GameRules {
     const val MIN_TERRITORIES = 18

@@ -53,6 +53,11 @@ enum class GameScreenMode {
 fun GameScreen(
     viewModel: GameViewModel,
     gameMode: GameMode,
+    turnMode: TurnMode,
+    botDelayBaseSeconds: Int,
+    botDelayDeltaText: String,
+    onBotDelayBaseSecondsChanged: (Int) -> Unit,
+    onBotDelayDeltaTextChanged: (String) -> Unit,
     onBackToMenu: () -> Unit,
     screenMode: GameScreenMode = GameScreenMode.PLAY
 ) {
@@ -80,8 +85,10 @@ fun GameScreen(
     }
 
     // Create a stable click handler
-    val territoryClickHandler = remember(gameMode, allowInput) {
-        if (gameMode == GameMode.HUMAN_VS_BOT && allowInput) {
+    val territoryClickHandler = remember(gameMode, turnMode, allowInput) {
+        val canSelect = gameMode == GameMode.HUMAN_VS_BOT && allowInput &&
+            (turnMode == TurnMode.REAL_TIME || viewModel.isCurrentPlayerHuman())
+        if (canSelect) {
             { territoryId: Int ->
                 debugLog { "Territory clicked: $territoryId, Current player: ${viewModel.getCurrentPlayer()}, Is human turn: ${viewModel.isCurrentPlayerHuman()}" }
                 viewModel.selectTerritory(territoryId)
@@ -413,6 +420,30 @@ fun GameScreen(
             }
         }
 
+        if (screenMode == GameScreenMode.PLAY && turnMode == TurnMode.REAL_TIME) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Bot Delay")
+                BotDelayStepper(
+                    label = "Base (s)",
+                    value = botDelayBaseSeconds,
+                    min = UiConstants.BOT_DELAY_BASE_MIN_SECONDS,
+                    max = UiConstants.BOT_DELAY_BASE_MAX_SECONDS,
+                    onValueChanged = onBotDelayBaseSecondsChanged
+                )
+                Text("Delta (s)")
+                TextField(
+                    value = botDelayDeltaText,
+                    onValueChange = onBotDelayDeltaTextChanged,
+                    singleLine = true,
+                    modifier = Modifier.width(UiConstants.BOT_DELAY_DELTA_FIELD_WIDTH)
+                )
+            }
+        }
+
         val statusMessage = uiState.errorMessage ?: uiState.message
         if (statusMessage != null) {
             Text(
@@ -547,6 +578,7 @@ fun GameScreen(
                 }
 
                 val showActionButton = when {
+                    turnMode == TurnMode.REAL_TIME -> false
                     viewModel.isGameOver() -> false
                     gameState.gamePhase == GamePhase.REINFORCEMENT -> false
                     replayMode -> false
@@ -790,6 +822,35 @@ private fun popupTextColor(backgroundColor: androidx.compose.ui.graphics.Color):
         GameColors.UiTextPrimary
     } else {
         GameColors.UiTextInverted
+    }
+}
+
+@Composable
+private fun BotDelayStepper(
+    label: String,
+    value: Int,
+    min: Int,
+    max: Int,
+    onValueChanged: (Int) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(label)
+        OutlinedButton(
+            onClick = { onValueChanged((value - 1).coerceAtLeast(min)) },
+            enabled = value > min
+        ) {
+            Text("-")
+        }
+        Text(value.toString(), style = MaterialTheme.typography.bodyLarge)
+        OutlinedButton(
+            onClick = { onValueChanged((value + 1).coerceAtMost(max)) },
+            enabled = value < max
+        ) {
+            Text("+")
+        }
     }
 }
 

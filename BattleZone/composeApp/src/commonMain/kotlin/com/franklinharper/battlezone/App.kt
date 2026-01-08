@@ -18,22 +18,33 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun App() {
     MaterialTheme {
         var selectedMode by remember { mutableStateOf<GameMode?>(null) }
+        var selectedTurnMode by remember { mutableStateOf(TurnMode.REAL_TIME) }
+        var selectedRoundTimerSeconds by remember { mutableStateOf(DEFAULT_REALTIME_ROUND_TIMER_SECONDS) }
+        var botDelayBaseSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS) }
+        var botDelayDeltaSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_DELTA_SECONDS) }
+        var botDelayDeltaText by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_DELTA_SECONDS.toString()) }
         var viewModel by remember { mutableStateOf<GameViewModel?>(null) }
         var playbackMode by remember { mutableStateOf<GameMode?>(null) }
+        var playbackTurnMode by remember { mutableStateOf<TurnMode?>(null) }
         var menuStatusMessage by remember { mutableStateOf<String?>(null) }
         val filePicker = rememberRecordingFilePicker()
         val scope = rememberCoroutineScope()
 
         when {
-            playbackMode != null && viewModel != null -> {
+            playbackMode != null && playbackTurnMode != null && viewModel != null -> {
                 val playbackGameMode = playbackMode!!
+                val playbackModeSelection = playbackTurnMode!!
                 val vm = viewModel!!
 
                 PlaybackCoordinator(
                     viewModel = vm,
                     gameMode = playbackGameMode,
+                    turnMode = playbackModeSelection,
+                    botDelayBaseSeconds = botDelayBaseSeconds,
+                    botDelayDeltaText = botDelayDeltaText,
                     onBackToMenu = {
                         playbackMode = null
+                        playbackTurnMode = null
                         viewModel = null
                         menuStatusMessage = null
                     }
@@ -88,7 +99,9 @@ fun App() {
                                 initialMap = snapshot.gameState.map,
                                 gameMode = recording.gameMode,
                                 humanPlayerId = recording.humanPlayerId,
-                                bots = bots
+                                bots = bots,
+                                turnMode = recording.turnMode,
+                                roundTimerSeconds = recording.roundTimerSeconds
                             )
 
                             if (!newViewModel.importRecordingJson(json)) {
@@ -98,6 +111,7 @@ fun App() {
 
                             viewModel = newViewModel
                             playbackMode = recording.gameMode
+                            playbackTurnMode = recording.turnMode
                             menuStatusMessage = null
                         }
                     },
@@ -109,6 +123,25 @@ fun App() {
             viewModel == null -> {
                 PlayerCountSelectionScreen(
                     gameMode = selectedMode!!,
+                    turnMode = selectedTurnMode,
+                    roundTimerSeconds = selectedRoundTimerSeconds,
+                    onTurnModeChanged = { selectedTurnMode = it },
+                    onRoundTimerSecondsChanged = { selectedRoundTimerSeconds = it },
+                    botDelayDeltaText = botDelayDeltaText,
+                    onBotDelayDeltaTextChanged = { text ->
+                        botDelayDeltaText = text
+                        val parsed = text.toFloatOrNull()
+                        if (parsed != null) {
+                            val clamped = parsed.coerceIn(
+                                UiConstants.BOT_DELAY_DELTA_MIN_SECONDS,
+                                UiConstants.BOT_DELAY_DELTA_MAX_SECONDS
+                            )
+                            botDelayDeltaSeconds = clamped
+                            if (clamped != parsed) {
+                                botDelayDeltaText = clamped.toString()
+                            }
+                        }
+                    },
                     onPlayerCountSelected = { playerCount ->
                         // Generate map with the selected player count
                         val initialMap = MapGenerator.generate(playerCount = playerCount)
@@ -126,7 +159,9 @@ fun App() {
                             initialMap = initialMap,
                             gameMode = selectedMode!!,
                             humanPlayerId = 0,
-                            bots = bots
+                            bots = bots,
+                            turnMode = selectedTurnMode,
+                            roundTimerSeconds = selectedRoundTimerSeconds
                         )
                     },
                     onBack = {
@@ -148,15 +183,27 @@ fun App() {
                     val turnCoordinator = remember { TurnCoordinator(scope) }
 
                     // Coordinate bot turns using proper state machine
-                    LaunchedEffect(vm.isCurrentPlayerBot(), gameState.gamePhase, uiState.currentBotDecision, replayMode) {
+                    LaunchedEffect(
+                        vm.isCurrentPlayerBot(),
+                        gameState.currentPlayerIndex,
+                        gameState.gamePhase,
+                        uiState.currentBotDecision,
+                        replayMode,
+                        selectedTurnMode,
+                        botDelayBaseSeconds,
+                        botDelayDeltaSeconds
+                    ) {
                         if (!replayMode) {
-                            turnCoordinator.coordinateTurn(
-                                gameMode = selectedMode!!,
-                                isCurrentPlayerBot = vm.isCurrentPlayerBot(),
-                                gamePhase = gameState.gamePhase,
-                                hasBotDecision = uiState.currentBotDecision != null
-                            )
-                        }
+                        turnCoordinator.coordinateTurn(
+                            gameMode = selectedMode!!,
+                            turnMode = selectedTurnMode,
+                            isCurrentPlayerBot = vm.isCurrentPlayerBot(),
+                            gamePhase = gameState.gamePhase,
+                            hasBotDecision = uiState.currentBotDecision != null,
+                            botDelayBaseSeconds = botDelayBaseSeconds,
+                            botDelayDeltaSeconds = botDelayDeltaSeconds
+                        )
+                    }
                     }
 
                     // Handle turn actions from coordinator
@@ -175,6 +222,24 @@ fun App() {
                     GameScreen(
                         viewModel = vm,
                         gameMode = selectedMode!!,
+                        turnMode = selectedTurnMode,
+                        botDelayBaseSeconds = botDelayBaseSeconds,
+                        botDelayDeltaText = botDelayDeltaText,
+                        onBotDelayDeltaTextChanged = { text ->
+                            botDelayDeltaText = text
+                            val parsed = text.toFloatOrNull()
+                            if (parsed != null) {
+                                val clamped = parsed.coerceIn(
+                                    UiConstants.BOT_DELAY_DELTA_MIN_SECONDS,
+                                    UiConstants.BOT_DELAY_DELTA_MAX_SECONDS
+                                )
+                                botDelayDeltaSeconds = clamped
+                                if (clamped != parsed) {
+                                    botDelayDeltaText = clamped.toString()
+                                }
+                            }
+                        },
+                        onBotDelayBaseSecondsChanged = { botDelayBaseSeconds = it },
                         onBackToMenu = {
                             selectedMode = null
                             viewModel = null
@@ -191,11 +256,19 @@ fun App() {
 private fun PlaybackCoordinator(
     viewModel: GameViewModel,
     gameMode: GameMode,
+    turnMode: TurnMode,
+    botDelayBaseSeconds: Int,
+    botDelayDeltaText: String,
     onBackToMenu: () -> Unit
 ) {
     GameScreen(
         viewModel = viewModel,
         gameMode = gameMode,
+        turnMode = turnMode,
+        botDelayBaseSeconds = botDelayBaseSeconds,
+        botDelayDeltaText = botDelayDeltaText,
+        onBotDelayDeltaTextChanged = {},
+        onBotDelayBaseSecondsChanged = {},
         onBackToMenu = onBackToMenu,
         screenMode = GameScreenMode.PLAYBACK
     )

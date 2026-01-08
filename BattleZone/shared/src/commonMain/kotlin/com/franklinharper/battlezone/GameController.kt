@@ -1,11 +1,17 @@
 package com.franklinharper.battlezone
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Represents the result of a combat action
@@ -75,8 +81,17 @@ class GameController(
     initialMap: GameMap,
     private val gameMode: GameMode = GameMode.BOT_VS_BOT,
     private val humanPlayerId: Int = 0,
-    private val bots: Array<Bot>
+    private val bots: Array<Bot>,
+    private val turnMode: TurnMode = TurnMode.TURN_BASED,
+    roundTimerSeconds: Int = DEFAULT_REALTIME_ROUND_TIMER_SECONDS
 ) {
+    private val roundTimerSecondsSafe = roundTimerSeconds.coerceIn(
+        REALTIME_ROUND_TIMER_MIN_SECONDS,
+        REALTIME_ROUND_TIMER_MAX_SECONDS
+    )
+    private val realTimeRoundDurationMs = roundTimerSecondsSafe * MILLIS_PER_SECOND
+    private val realTimeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var realTimeTimerJob: Job? = null
     private val _gameState = MutableStateFlow(createInitialGameState(initialMap))
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
 
@@ -100,20 +115,27 @@ class GameController(
 
     init {
         resetHistory()
+        resetRealTimeTimer()
     }
 
     /**
      * Check if the current player is human
      */
     fun isCurrentPlayerHuman(): Boolean {
-        return gameMode == GameMode.HUMAN_VS_BOT && _gameState.value.currentPlayerIndex == humanPlayerId
+        return when (turnMode) {
+            TurnMode.REAL_TIME -> gameMode == GameMode.HUMAN_VS_BOT && humanPlayerId !in _gameState.value.eliminatedPlayers
+            TurnMode.TURN_BASED -> gameMode == GameMode.HUMAN_VS_BOT && _gameState.value.currentPlayerIndex == humanPlayerId
+        }
     }
 
     /**
      * Check if the current player is a bot
      */
     fun isCurrentPlayerBot(): Boolean {
-        return gameMode == GameMode.BOT_VS_BOT || _gameState.value.currentPlayerIndex != humanPlayerId
+        return when (turnMode) {
+            TurnMode.REAL_TIME -> isBotPlayer(_gameState.value.currentPlayerIndex)
+            TurnMode.TURN_BASED -> gameMode == GameMode.BOT_VS_BOT || _gameState.value.currentPlayerIndex != humanPlayerId
+        }
     }
 
     /**
@@ -131,11 +153,16 @@ class GameController(
             GameMode.HUMAN_VS_BOT -> 0  // Human always starts
             GameMode.BOT_VS_BOT -> map.gameRandom.nextInt(map.playerCount)
         }
+        val resolvedStartingPlayer = if (turnMode == TurnMode.REAL_TIME && gameMode == GameMode.HUMAN_VS_BOT) {
+            1
+        } else {
+            startingPlayer
+        }
 
         return GameState(
             map = map,
             players = players,
-            currentPlayerIndex = startingPlayer,
+            currentPlayerIndex = resolvedStartingPlayer,
             gamePhase = GamePhase.ATTACK,
             eliminatedPlayers = emptySet(),
             skipTracker = emptySet(),
@@ -152,6 +179,7 @@ class GameController(
         if (_gameState.value.winner != null) return
 
         val currentPlayer = _gameState.value.currentPlayerIndex
+        if (!isBotPlayer(currentPlayer)) return
         val botIndex = if (gameMode == GameMode.HUMAN_VS_BOT) {
             currentPlayer - 1  // bots[0] is player 1
         } else {
@@ -178,7 +206,13 @@ class GameController(
 
         when (decision) {
             is BotDecision.Attack -> executeAttack(decision.fromTerritoryId, decision.toTerritoryId)
-            is BotDecision.Skip -> skipTurn()
+            is BotDecision.Skip -> {
+                if (turnMode == TurnMode.REAL_TIME) {
+                    advanceRealTimeBot()
+                } else {
+                    skipTurn()
+                }
+            }
         }
 
         // Clear the decision after execution
@@ -194,10 +228,10 @@ class GameController(
         val toTerritory = currentGameState.map.territories.getOrNull(toTerritoryId) ?: return
 
         // Validate attack
-        if (fromTerritory.owner != currentGameState.currentPlayerIndex) return
+        if (turnMode == TurnMode.TURN_BASED && fromTerritory.owner != currentGameState.currentPlayerIndex) return
         if (fromTerritory.armyCount < GameRules.MIN_ARMIES_TO_ATTACK) return
         if (!fromTerritory.adjacentTerritories[toTerritoryId]) return
-        if (toTerritory.owner == currentGameState.currentPlayerIndex) return
+        if (toTerritory.owner == fromTerritory.owner) return
 
         val combatResult = GameLogic.resolveAttack(fromTerritory, toTerritory, currentGameState.map.gameRandom)
 
@@ -216,6 +250,7 @@ class GameController(
             )
         )
         recordSnapshot()
+        resetRealTimeTimer()
     }
 
     /**
@@ -223,6 +258,10 @@ class GameController(
      */
     fun skipTurn() {
         if (!canMutateGame()) return
+        if (turnMode == TurnMode.REAL_TIME) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Skipping is unavailable in real-time mode.")
+            return
+        }
         val currentState = _gameState.value
         val currentPlayer = currentState.currentPlayerIndex
         val isBotSkip = isCurrentPlayerBot()
@@ -271,6 +310,12 @@ class GameController(
         _gameState.value = currentState.copy(currentPlayerIndex = nextPlayerIndex)
     }
 
+    private fun advanceRealTimeBot() {
+        val currentState = _gameState.value
+        val nextBotIndex = nextRealTimePlayerIndex(currentState.currentPlayerIndex, currentState.eliminatedPlayers)
+        _gameState.value = currentState.copy(currentPlayerIndex = nextBotIndex)
+    }
+
     /**
      * Check if the current player has won (owns all territories)
      */
@@ -296,9 +341,14 @@ class GameController(
      * Start the reinforcement phase
      */
     private fun startReinforcementPhase() {
+        cancelRealTimeTimer()
         _gameState.value = _gameState.value.copy(gamePhase = GamePhase.REINFORCEMENT)
         _uiState.value = _uiState.value.copy(
-            message = "Reinforcement Phase: All players skipped. Distributing reinforcements...",
+            message = if (turnMode == TurnMode.REAL_TIME) {
+                "Round timed out. Distributing reinforcements..."
+            } else {
+                "Reinforcement Phase: All players skipped. Distributing reinforcements..."
+            },
             attackArrows = emptyList(),  // Clear attack arrows for new round
             skippedPlayers = emptySet()  // Clear skipped players for new round
         )
@@ -359,6 +409,7 @@ class GameController(
         )
         recordAction(RecordedEvent.Reinforcement(players = reinforcementResults))
         recordSnapshot()
+        resetRealTimeTimer()
     }
 
     /**
@@ -370,6 +421,7 @@ class GameController(
         _replayMode.value = false
         recordingEnabled = true
         resetHistory()
+        resetRealTimeTimer()
     }
 
     /**
@@ -390,8 +442,13 @@ class GameController(
         val currentState = _gameState.value
         val currentUiState = _uiState.value
 
-        if (!isCurrentPlayerHuman()) {
-            _uiState.value = currentUiState.copy(errorMessage = "Not your turn!")
+        val canHumanAct = if (turnMode == TurnMode.REAL_TIME) {
+            gameMode == GameMode.HUMAN_VS_BOT && humanPlayerId !in currentState.eliminatedPlayers
+        } else {
+            isCurrentPlayerHuman()
+        }
+        if (!canHumanAct) {
+            _uiState.value = currentUiState.copy(errorMessage = "You cannot act right now.")
             return
         }
 
@@ -507,6 +564,8 @@ class GameController(
         val recordedEventList = recordedEvents.toList()
         val recording = RecordedGame(
             gameMode = gameMode,
+            turnMode = turnMode,
+            roundTimerSeconds = roundTimerSecondsSafe,
             humanPlayerId = humanPlayerId,
             initialSnapshot = recordedStart,
             events = recordedEventList
@@ -548,6 +607,7 @@ class GameController(
         updatePlaybackInfo()
         _replayMode.value = true
         recordingEnabled = false
+        cancelRealTimeTimer()
         _uiState.value = _uiState.value.copy(
             message = "Recording loaded. Use Undo/Redo to step through.",
             errorMessage = null
@@ -654,7 +714,7 @@ class GameController(
 
         val attackerPlayerId = combatResult.attackerPlayerId
         val defenderPlayerId = combatResult.defenderPlayerId
-        val isBotAttack = isCurrentPlayerBot()
+        val isBotAttack = isBotPlayer(attackerPlayerId)
 
         if (combatResult.attackerWins) {
             val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
@@ -662,7 +722,7 @@ class GameController(
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,
-                message = "${playerLabel(currentGameState.currentPlayerIndex, gameMode)} wins! " +
+                message = "${playerLabel(attackerPlayerId, gameMode)} wins! " +
                     "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                     "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 attackArrows = if (isBotAttack) {
@@ -712,6 +772,7 @@ class GameController(
             _uiState.value = _uiState.value.copy(
                 message = "💀 ${playerLabel(humanPlayerId, gameMode)} eliminated! Game Over."
             )
+            cancelRealTimeTimer()
             return
         }
 
@@ -727,15 +788,59 @@ class GameController(
             _uiState.value = _uiState.value.copy(
                 message = "🎉 ${playerLabel(winner, gameMode)} wins the game! 🎉"
             )
+            cancelRealTimeTimer()
             return
         }
 
-        _gameState.value = _gameState.value.copy(
+        val updatedState = _gameState.value.copy(
             skipTracker = emptySet(),
             eliminatedPlayers = eliminatedPlayers,
             players = updatedPlayers
         )
 
-        nextPlayer()
+        if (turnMode == TurnMode.TURN_BASED) {
+            _gameState.value = updatedState
+            nextPlayer()
+        } else {
+            val nextIndex = nextRealTimePlayerIndex(attackerPlayerId, eliminatedPlayers)
+            _gameState.value = updatedState.copy(currentPlayerIndex = nextIndex)
+        }
+    }
+
+    private fun nextRealTimePlayerIndex(startIndex: Int, eliminatedPlayers: Set<Int>): Int {
+        val playerCount = _gameState.value.map.playerCount
+        var nextIndex = startIndex
+        var attempts = 0
+        do {
+            nextIndex = (nextIndex + 1) % playerCount
+            attempts++
+        } while (attempts <= playerCount && (nextIndex in eliminatedPlayers || isHumanPlayer(nextIndex)))
+        return nextIndex
+    }
+
+    private fun isBotPlayer(playerId: Int): Boolean {
+        return gameMode == GameMode.BOT_VS_BOT || playerId != humanPlayerId
+    }
+
+    private fun isHumanPlayer(playerId: Int): Boolean {
+        return gameMode == GameMode.HUMAN_VS_BOT && playerId == humanPlayerId
+    }
+
+    private fun resetRealTimeTimer() {
+        if (turnMode != TurnMode.REAL_TIME) return
+        if (_replayMode.value) return
+        if (_gameState.value.gamePhase != GamePhase.ATTACK) return
+        cancelRealTimeTimer()
+        realTimeTimerJob = realTimeScope.launch {
+            delay(realTimeRoundDurationMs)
+            if (_gameState.value.gamePhase == GamePhase.ATTACK && !_replayMode.value) {
+                startReinforcementPhase()
+            }
+        }
+    }
+
+    private fun cancelRealTimeTimer() {
+        realTimeTimerJob?.cancel()
+        realTimeTimerJob = null
     }
 }

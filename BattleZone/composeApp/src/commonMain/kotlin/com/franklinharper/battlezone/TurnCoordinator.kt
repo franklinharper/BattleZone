@@ -4,6 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
+import kotlin.random.Random
 
 /**
  * Action to be taken during a turn
@@ -49,9 +51,12 @@ class TurnCoordinator(
      */
     fun coordinateTurn(
         gameMode: GameMode,
+        turnMode: TurnMode,
         isCurrentPlayerBot: Boolean,
         gamePhase: GamePhase,
-        hasBotDecision: Boolean
+        hasBotDecision: Boolean,
+        botDelayBaseSeconds: Int,
+        botDelayDeltaSeconds: Float
     ) {
         if (gamePhase == GamePhase.REINFORCEMENT) {
             scope.launch {
@@ -61,8 +66,12 @@ class TurnCoordinator(
             return
         }
 
-        // Only coordinate bot turns in Human vs Bot mode
-        if (gameMode != GameMode.HUMAN_VS_BOT || !isCurrentPlayerBot) {
+        val shouldCoordinateBots = when (turnMode) {
+            TurnMode.REAL_TIME -> isCurrentPlayerBot
+            TurnMode.TURN_BASED -> gameMode == GameMode.HUMAN_VS_BOT && isCurrentPlayerBot
+        }
+
+        if (!shouldCoordinateBots) {
             return
         }
 
@@ -70,8 +79,15 @@ class TurnCoordinator(
             when (gamePhase) {
                 GamePhase.ATTACK -> {
                     if (!hasBotDecision) {
-                        // Delay before requesting decision (visual feedback for turn change)
-                        delay(timing.decisionDelay)
+                        val delayMs = if (turnMode == TurnMode.REAL_TIME) {
+                            randomBotDelayMs(
+                                baseSeconds = botDelayBaseSeconds,
+                                deltaSeconds = botDelayDeltaSeconds
+                            )
+                        } else {
+                            timing.decisionDelay
+                        }
+                        delay(delayMs)
                         _actions.emit(TurnCoordinatorAction.RequestBotDecision)
                     } else {
                         // Delay before executing (show highlighted attack to user)
@@ -84,5 +100,23 @@ class TurnCoordinator(
                 }
             }
         }
+    }
+
+    private fun randomBotDelayMs(baseSeconds: Int, deltaSeconds: Float): Long {
+        val clampedBase = baseSeconds.coerceIn(
+            UiConstants.BOT_DELAY_BASE_MIN_SECONDS,
+            UiConstants.BOT_DELAY_BASE_MAX_SECONDS
+        )
+        val clampedDelta = deltaSeconds.coerceIn(
+            UiConstants.BOT_DELAY_DELTA_MIN_SECONDS,
+            UiConstants.BOT_DELAY_DELTA_MAX_SECONDS
+        )
+        val minSeconds = (clampedBase - clampedDelta).coerceAtLeast(0f)
+        val maxSeconds = clampedBase + clampedDelta
+        if (minSeconds >= maxSeconds) {
+            return (minSeconds * MILLIS_PER_SECOND).roundToLong()
+        }
+        val delaySeconds = Random.nextDouble(minSeconds.toDouble(), maxSeconds.toDouble())
+        return (delaySeconds * MILLIS_PER_SECOND).roundToLong()
     }
 }

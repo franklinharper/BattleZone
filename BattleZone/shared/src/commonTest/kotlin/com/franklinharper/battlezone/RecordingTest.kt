@@ -14,7 +14,9 @@ class RecordingTest {
             initialMap = map,
             gameMode = GameMode.BOT_VS_BOT,
             humanPlayerId = 0,
-            bots = bots
+            bots = bots,
+            turnMode = TurnMode.TURN_BASED,
+            roundTimerSeconds = 5
         )
 
         val initialPlayer = controller.gameState.value.currentPlayerIndex
@@ -46,7 +48,9 @@ class RecordingTest {
             initialMap = map.deepCopy(),
             gameMode = GameMode.BOT_VS_BOT,
             humanPlayerId = 0,
-            bots = Array<Bot>(2) { DefaultBot(GameRandom(99L)) }
+            bots = Array<Bot>(2) { DefaultBot(GameRandom(99L)) },
+            turnMode = TurnMode.TURN_BASED,
+            roundTimerSeconds = 5
         )
         assertTrue(replayController.importRecordingJson(recordingJson))
         assertEquals(initialPlayer, replayController.gameState.value.currentPlayerIndex)

@@ -15,6 +15,7 @@ object RecordingReplayer {
                 uiState = currentUi,
                 event = event,
                 gameMode = recording.gameMode,
+                turnMode = recording.turnMode,
                 humanPlayerId = recording.humanPlayerId
             )
             snapshots.add(next)
@@ -30,11 +31,12 @@ object RecordingReplayer {
         uiState: GameUiState,
         event: RecordedEvent,
         gameMode: GameMode,
+        turnMode: TurnMode,
         humanPlayerId: Int
     ): GameSnapshot {
         return when (event) {
-            is RecordedEvent.Attack -> applyAttack(gameState, uiState, event, gameMode, humanPlayerId)
-            is RecordedEvent.Skip -> applySkip(gameState, uiState, event, gameMode, humanPlayerId)
+            is RecordedEvent.Attack -> applyAttack(gameState, uiState, event, gameMode, turnMode, humanPlayerId)
+            is RecordedEvent.Skip -> applySkip(gameState, uiState, event, gameMode, turnMode, humanPlayerId)
             is RecordedEvent.Reinforcement -> applyReinforcement(gameState, uiState, event, gameMode)
         }
     }
@@ -44,6 +46,7 @@ object RecordingReplayer {
         uiState: GameUiState,
         event: RecordedEvent.Attack,
         gameMode: GameMode,
+        turnMode: TurnMode,
         humanPlayerId: Int
     ): GameSnapshot {
         val updatedState = copyGameStateForUpdate(gameState)
@@ -67,7 +70,7 @@ object RecordingReplayer {
         )
 
         val message = if (combatResult.attackerWins) {
-            "${playerLabel(updatedState.currentPlayerIndex, gameMode)} wins! " +
+            "${playerLabel(attackerPlayerId, gameMode)} wins! " +
                 "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                 "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}"
         } else {
@@ -124,7 +127,14 @@ object RecordingReplayer {
             return GameSnapshot(finalState, finalUi)
         }
 
-        val nextPlayerIndex = nextPlayerIndex(updatedState, eliminatedPlayers)
+        val nextPlayerIndex = nextPlayerIndexForMode(
+            updatedState,
+            eliminatedPlayers,
+            gameMode,
+            turnMode,
+            attackerPlayerId,
+            humanPlayerId
+        )
         val nextState = updatedState.copy(
             skipTracker = emptySet(),
             eliminatedPlayers = eliminatedPlayers,
@@ -140,6 +150,7 @@ object RecordingReplayer {
         uiState: GameUiState,
         event: RecordedEvent.Skip,
         gameMode: GameMode,
+        turnMode: TurnMode,
         humanPlayerId: Int
     ): GameSnapshot {
         val updatedState = copyGameStateForUpdate(gameState)
@@ -150,6 +161,18 @@ object RecordingReplayer {
         } else {
             updatedState
         }
+        if (turnMode == TurnMode.REAL_TIME) {
+            val nextIndex = nextPlayerIndexForMode(
+                normalizedState,
+                normalizedState.eliminatedPlayers,
+                gameMode,
+                turnMode,
+                currentPlayer,
+                humanPlayerId
+            )
+            return GameSnapshot(normalizedState.copy(currentPlayerIndex = nextIndex), updatedUi)
+        }
+
         val updatedSkipTracker = normalizedState.skipTracker + currentPlayer
         val activePlayerCount = normalizedState.map.playerCount - normalizedState.eliminatedPlayers.size
         val skipCount = (updatedSkipTracker - normalizedState.eliminatedPlayers).size
@@ -242,5 +265,26 @@ object RecordingReplayer {
             nextPlayerIndex = (nextPlayerIndex + 1) % gameState.map.playerCount
         }
         return nextPlayerIndex
+    }
+
+    private fun nextPlayerIndexForMode(
+        gameState: GameState,
+        eliminatedPlayers: Set<Int>,
+        gameMode: GameMode,
+        turnMode: TurnMode,
+        startIndex: Int,
+        humanPlayerId: Int
+    ): Int {
+        if (turnMode == TurnMode.TURN_BASED || gameMode == GameMode.BOT_VS_BOT) {
+            return nextPlayerIndex(gameState.copy(currentPlayerIndex = startIndex), eliminatedPlayers)
+        }
+        val playerCount = gameState.map.playerCount
+        var nextIndex = startIndex
+        var attempts = 0
+        do {
+            nextIndex = (nextIndex + 1) % playerCount
+            attempts++
+        } while (attempts <= playerCount && (nextIndex in eliminatedPlayers || nextIndex == humanPlayerId))
+        return nextIndex
     }
 }

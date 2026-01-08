@@ -188,6 +188,12 @@ enum class GameMode {
     BOT_VS_BOT
 }
 
+@kotlinx.serialization.Serializable
+enum class TurnMode {
+    REAL_TIME,
+    TURN_BASED
+}
+
 /**
  * Represents a single turn action
  */

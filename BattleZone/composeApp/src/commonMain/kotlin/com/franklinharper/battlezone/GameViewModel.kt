@@ -11,13 +11,17 @@ class GameViewModel(
     initialMap: GameMap,
     gameMode: GameMode = GameMode.BOT_VS_BOT,
     humanPlayerId: Int = 0,
-    bots: Array<Bot>
+    bots: Array<Bot>,
+    turnMode: TurnMode = TurnMode.TURN_BASED,
+    roundTimerSeconds: Int = DEFAULT_REALTIME_ROUND_TIMER_SECONDS
 ) {
     private val controller = GameController(
         initialMap = initialMap,
         gameMode = gameMode,
         humanPlayerId = humanPlayerId,
-        bots = bots
+        bots = bots,
+        turnMode = turnMode,
+        roundTimerSeconds = roundTimerSeconds
     )
 
     /** Observable game state */

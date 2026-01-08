@@ -10,6 +10,8 @@ import kotlinx.serialization.json.Json
 data class RecordedGame(
     val version: Int = 2,
     val gameMode: GameMode,
+    val turnMode: TurnMode = TurnMode.TURN_BASED,
+    val roundTimerSeconds: Int = DEFAULT_REALTIME_ROUND_TIMER_SECONDS,
     val humanPlayerId: Int,
     val initialSnapshot: RecordedSnapshot? = null,
     val events: List<RecordedEvent> = emptyList(),
