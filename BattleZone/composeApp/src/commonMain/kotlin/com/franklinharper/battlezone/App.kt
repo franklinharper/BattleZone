@@ -49,9 +49,16 @@ fun App() {
                     },
                     onLoadRecording = {
                         scope.launch {
-                            val json = filePicker.loadRecording()
-                            if (json == null) {
+                            val bytes = filePicker.loadRecording()
+                            if (bytes == null) {
                                 menuStatusMessage = "Recording load cancelled."
+                                return@launch
+                            }
+
+                            val json = try {
+                                RecordingCompression.decompressToJson(bytes)
+                            } catch (ex: Exception) {
+                                menuStatusMessage = "Recording file is invalid."
                                 return@launch
                             }
 

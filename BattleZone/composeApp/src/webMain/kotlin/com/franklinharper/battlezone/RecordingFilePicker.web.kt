@@ -9,6 +9,7 @@ import org.w3c.dom.HTMLInputElement
 import org.w3c.files.Blob
 import org.w3c.files.BlobPropertyBag
 import org.w3c.files.FileReader
+import org.khronos.webgl.Uint8Array
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -22,8 +23,12 @@ actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
 }
 
 private class WebRecordingFilePicker : RecordingFilePicker {
-    override suspend fun saveRecording(json: String): Boolean {
-        val blob = Blob(arrayOf(json), BlobPropertyBag(type = "application/json"))
+    override suspend fun saveRecording(bytes: ByteArray): Boolean {
+        val uint8Array = Uint8Array(bytes.size)
+        bytes.forEachIndexed { index, value ->
+            uint8Array[index] = value.toInt()
+        }
+        val blob = Blob(arrayOf(uint8Array), BlobPropertyBag(type = "application/octet-stream"))
         val url = window.URL.createObjectURL(blob)
         val anchor = document.createElement("a") as HTMLAnchorElement
         anchor.href = url
@@ -33,11 +38,11 @@ private class WebRecordingFilePicker : RecordingFilePicker {
         return true
     }
 
-    override suspend fun loadRecording(): String? = suspendCancellableCoroutine { continuation ->
+    override suspend fun loadRecording(): ByteArray? = suspendCancellableCoroutine { continuation ->
         try {
             val input = document.createElement("input") as HTMLInputElement
             input.type = "file"
-        input.accept = "application/json,.json,.bzr"
+            input.accept = "application/json,.json,.bzr"
             input.onchange = {
                 val file = input.files?.item(0)
                 if (file == null) {
@@ -45,9 +50,16 @@ private class WebRecordingFilePicker : RecordingFilePicker {
                 } else {
                     val reader = FileReader()
                     reader.onloadend = {
-                        continuation.resume(reader.result as? String)
+                        val arrayBuffer = reader.result as? org.khronos.webgl.ArrayBuffer
+                        if (arrayBuffer == null) {
+                            continuation.resume(null)
+                            return@onloadend
+                        }
+                        val uint8 = Uint8Array(arrayBuffer)
+                        val bytes = ByteArray(uint8.length) { index -> uint8[index] }
+                        continuation.resume(bytes)
                     }
-                    reader.readAsText(file)
+                    reader.readAsArrayBuffer(file)
                 }
             }
             input.click()

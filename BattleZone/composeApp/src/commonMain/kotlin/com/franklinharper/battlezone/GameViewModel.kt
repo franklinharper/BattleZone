@@ -76,6 +76,18 @@ class GameViewModel(
     /** Import recording from JSON */
     fun importRecordingJson(json: String): Boolean = controller.importRecordingJson(json)
 
+    /** Export recording as compressed bytes */
+    fun exportRecordingBytes(): ByteArray {
+        val json = controller.exportRecordingJson()
+        return RecordingCompression.compressToBytes(json)
+    }
+
+    /** Import recording from compressed bytes */
+    fun importRecordingBytes(bytes: ByteArray): Boolean {
+        val json = RecordingCompression.decompressToJson(bytes)
+        return controller.importRecordingJson(json)
+    }
+
     /** Seek to a specific playback index */
     fun seekToPlaybackIndex(index: Int) = controller.seekToIndex(index)
 

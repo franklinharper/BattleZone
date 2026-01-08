@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -113,6 +114,9 @@ fun GameScreen(
     var debugModeEnabled by remember { mutableStateOf(DebugFlags.enableLogs) }
     var seedText by remember { mutableStateOf("") }
     var debugCellIndex by remember { mutableStateOf<Int?>(null) }
+    var eliminationMessage by remember { mutableStateOf<String?>(null) }
+    var eliminationColor by remember { mutableStateOf(GameColors.ScreenBackground) }
+    var lastEliminated by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val clipboardManager = LocalClipboardManager.current
     val applySeed: () -> Unit = applySeed@{
         val parsedSeed = seedText.trim().toLongOrNull() ?: return@applySeed
@@ -125,6 +129,38 @@ fun GameScreen(
 
     LaunchedEffect(gameState.map.seed) {
         seedText = gameState.map.seed?.toString().orEmpty()
+    }
+
+    LaunchedEffect(gameState.eliminatedPlayers, screenMode) {
+        if (screenMode != GameScreenMode.PLAYBACK) {
+            eliminationMessage = null
+            lastEliminated = gameState.eliminatedPlayers
+            return@LaunchedEffect
+        }
+
+        val newlyEliminated = gameState.eliminatedPlayers - lastEliminated
+        val newlyEliminatedBots = newlyEliminated.filter { playerId ->
+            gameMode == GameMode.BOT_VS_BOT || playerId != 0
+        }
+        if (newlyEliminatedBots.isNotEmpty()) {
+            val labels = newlyEliminatedBots.map { playerId ->
+                val botNumber = if (gameMode == GameMode.HUMAN_VS_BOT) {
+                    playerId
+                } else {
+                    playerId + 1
+                }
+                "Bot $botNumber"
+            }
+            eliminationColor = GameColors.getPlayerColor(newlyEliminatedBots.first())
+            eliminationMessage = if (labels.size == 1) {
+                "${labels.first()} Eliminated"
+            } else {
+                "Bots ${labels.joinToString(", ") { label -> label.removePrefix("Bot ") }} Eliminated"
+            }
+            kotlinx.coroutines.delay(UiConstants.PLAYBACK_ELIMINATION_POPUP_DURATION_MS)
+            eliminationMessage = null
+        }
+        lastEliminated = gameState.eliminatedPlayers
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -207,8 +243,8 @@ fun GameScreen(
                     Button(
                         onClick = {
                             coroutineScope.launch {
-                                val json = viewModel.exportRecordingJson()
-                                val success = filePicker.saveRecording(json)
+                                val bytes = viewModel.exportRecordingBytes()
+                                val success = filePicker.saveRecording(bytes)
                                 if (success) {
                                     viewModel.setMessage("Recording saved.")
                                 } else {
@@ -631,6 +667,32 @@ fun GameScreen(
                     Button(onClick = { showGameOverOverlay = false }) {
                         Text("OK")
                     }
+                }
+            }
+        }
+
+        if (eliminationMessage != null) {
+            val textColor = if (eliminationColor.luminance() > 0.5f) {
+                GameColors.UiTextPrimary
+            } else {
+                GameColors.UiTextInverted
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(GameColors.OverlayScrim),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(eliminationColor, UiConstants.PLAYER_LABEL_SHAPE)
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        text = eliminationMessage ?: "",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = textColor
+                    )
                 }
             }
         }

@@ -63,26 +63,26 @@ private class AndroidRecordingFilePicker(
     private val launchSave: (CompletableDeferred<Uri?>) -> Unit,
     private val launchLoad: (CompletableDeferred<Uri?>) -> Unit
 ) : RecordingFilePicker {
-    override suspend fun saveRecording(json: String): Boolean {
+    override suspend fun saveRecording(bytes: ByteArray): Boolean {
         val deferred = CompletableDeferred<Uri?>()
         launchSave(deferred)
         val uri = deferred.await() ?: return false
         return withContext(Dispatchers.IO) {
             val context = contextProvider()
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                outputStream.write(json.encodeToByteArray())
+                outputStream.write(bytes)
             } != null
         }
     }
 
-    override suspend fun loadRecording(): String? {
+    override suspend fun loadRecording(): ByteArray? {
         val deferred = CompletableDeferred<Uri?>()
         launchLoad(deferred)
         val uri = deferred.await() ?: return null
         return withContext(Dispatchers.IO) {
             val context = contextProvider()
-            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-                reader.readText()
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.readBytes()
             }
         }
     }

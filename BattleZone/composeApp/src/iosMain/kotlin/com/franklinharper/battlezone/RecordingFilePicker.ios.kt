@@ -6,9 +6,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSData
-import platform.Foundation.NSString
 import platform.Foundation.NSTemporaryDirectory
-import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.URLByAppendingPathComponent
 import platform.Foundation.writeToURL
 import platform.UIKit.UIApplication
@@ -24,6 +22,7 @@ import kotlinx.cinterop.usePinned
 import platform.Foundation.NSURL
 import platform.UIKit.UIWindow
 import platform.darwin.NSObject
+import platform.posix.memcpy
 
 private const val RECORDING_DOCUMENT_TYPE = "public.json"
 private const val RECORDING_FILE_PREFIX = "battlezone"
@@ -36,9 +35,9 @@ actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
 private class IosRecordingFilePicker : RecordingFilePicker {
     private var activeDelegate: RecordingDocumentPickerDelegate? = null
 
-    override suspend fun saveRecording(json: String): Boolean = suspendCancellableCoroutine { continuation ->
+    override suspend fun saveRecording(bytes: ByteArray): Boolean = suspendCancellableCoroutine { continuation ->
         try {
-            val tempUrl = createTempJsonFile(json)
+            val tempUrl = createTempJsonFile(bytes)
             if (tempUrl == null) {
                 continuation.resume(false)
                 return@suspendCancellableCoroutine
@@ -67,7 +66,7 @@ private class IosRecordingFilePicker : RecordingFilePicker {
         }
     }
 
-    override suspend fun loadRecording(): String? = suspendCancellableCoroutine { continuation ->
+    override suspend fun loadRecording(): ByteArray? = suspendCancellableCoroutine { continuation ->
         try {
             val picker = UIDocumentPickerViewController(
                 documentTypes = listOf(RECORDING_DOCUMENT_TYPE),
@@ -79,8 +78,7 @@ private class IosRecordingFilePicker : RecordingFilePicker {
                     activeDelegate = null
                     val firstUrl = urls.firstOrNull()
                     val data = firstUrl?.let { NSData.dataWithContentsOfURL(it) }
-                    val text = data?.let { NSString.create(it, NSUTF8StringEncoding) as String? }
-                    continuation.resume(text)
+                    continuation.resume(data?.toByteArray())
                 },
                 onCancel = {
                     activeDelegate = null
@@ -110,8 +108,8 @@ private class RecordingDocumentPickerDelegate(
     }
 }
 
-private fun createTempJsonFile(json: String): NSURL? {
-    val data = json.encodeToByteArray().toNSData()
+private fun createTempJsonFile(bytes: ByteArray): NSURL? {
+    val data = bytes.toNSData()
     val fileName = "${defaultRecordingFileName()}"
     val directory = NSTemporaryDirectory()
     val url = NSURL.fileURLWithPath(directory).URLByAppendingPathComponent(fileName) ?: return null
@@ -120,6 +118,17 @@ private fun createTempJsonFile(json: String): NSURL? {
 
 private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
     NSData.create(bytes = pinned.addressOf(0), length = size.toULong())
+}
+
+private fun NSData.toByteArray(): ByteArray {
+    val length = length.toInt()
+    val result = ByteArray(length)
+    if (length == 0) return result
+    val source = bytes ?: return result
+    result.usePinned { pinned ->
+        memcpy(pinned.addressOf(0), source, length.toULong())
+    }
+    return result
 }
 
 private fun defaultRecordingFileName(): String {

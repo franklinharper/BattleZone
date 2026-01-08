@@ -19,7 +19,7 @@ actual fun rememberRecordingFilePicker(): RecordingFilePicker = remember {
 }
 
 private class JvmRecordingFilePicker : RecordingFilePicker {
-    override suspend fun saveRecording(json: String): Boolean = withContext(Dispatchers.Swing) {
+    override suspend fun saveRecording(bytes: ByteArray): Boolean = withContext(Dispatchers.Swing) {
         val dialog = FileDialog(null as Frame?, "Save Recording", FileDialog.SAVE)
         dialog.file = defaultRecordingFileName()
         dialog.isVisible = true
@@ -28,12 +28,12 @@ private class JvmRecordingFilePicker : RecordingFilePicker {
         val directory = dialog.directory ?: return@withContext false
         val file = File(directory, fileName)
         withContext(Dispatchers.IO) {
-            file.writeText(json)
+            file.writeBytes(bytes)
         }
         true
     }
 
-    override suspend fun loadRecording(): String? = withContext(Dispatchers.Swing) {
+    override suspend fun loadRecording(): ByteArray? = withContext(Dispatchers.Swing) {
         val dialog = FileDialog(null as Frame?, "Open Recording", FileDialog.LOAD)
         dialog.isVisible = true
 
@@ -41,7 +41,7 @@ private class JvmRecordingFilePicker : RecordingFilePicker {
         val directory = dialog.directory ?: return@withContext null
         val file = File(directory, fileName)
         withContext(Dispatchers.IO) {
-            file.takeIf { it.exists() }?.readText()
+            file.takeIf { it.exists() }?.readBytes()
         }
     }
 }

@@ -39,6 +39,9 @@ class RecordingTest {
         assertEquals(afterSkipPlayer, controller.gameState.value.currentPlayerIndex)
 
         val recordingJson = controller.exportRecordingJson()
+        val compressed = RecordingCompression.compressToBytes(recordingJson)
+        val decompressed = RecordingCompression.decompressToJson(compressed)
+        assertEquals(recordingJson, decompressed)
         val replayController = GameController(
             initialMap = map.deepCopy(),
             gameMode = GameMode.BOT_VS_BOT,

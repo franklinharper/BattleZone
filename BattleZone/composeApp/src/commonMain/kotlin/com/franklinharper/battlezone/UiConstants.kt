@@ -22,6 +22,7 @@ object UiConstants {
     const val PLAYBACK_SPEED_HALF = 0.5f
     const val PLAYBACK_SPEED_NORMAL = 1.0f
     const val PLAYBACK_SPEED_DOUBLE = 2.0f
+    const val PLAYBACK_ELIMINATION_POPUP_DURATION_MS = 2000L
 
     val PLAYER_LABEL_CORNER_RADIUS = 6.dp
     val PLAYER_LABEL_SHAPE = RoundedCornerShape(PLAYER_LABEL_CORNER_RADIUS)
