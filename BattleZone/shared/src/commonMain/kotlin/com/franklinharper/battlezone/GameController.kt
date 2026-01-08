@@ -48,7 +48,7 @@ data class CombatResult(
 /**
  * Bot attack arrow display information
  */
-data class BotAttackArrow(
+data class AttackArrow(
     val fromTerritoryId: Int,
     val toTerritoryId: Int,
     val attackSucceeded: Boolean
@@ -65,7 +65,7 @@ data class GameUiState(
     val isProcessing: Boolean = false,
     val selectedTerritoryId: Int? = null,
     val errorMessage: String? = null,
-    val botAttackArrows: List<BotAttackArrow> = emptyList()
+    val attackArrows: List<AttackArrow> = emptyList()
 )
 
 /**
@@ -237,10 +237,10 @@ class GameController(
         _uiState.value = _uiState.value.copy(
             message = "${playerLabel(currentPlayer, gameMode)} skipped. ($skipCount/$activePlayerCount players skipped)",
             skippedPlayers = _uiState.value.skippedPlayers + currentPlayer,  // Add to skipped set
-            botAttackArrows = if (isCurrentPlayerHuman()) {
+            attackArrows = if (isCurrentPlayerHuman()) {
                 emptyList()  // Human skip - clear bot arrows from previous round
             } else {
-                _uiState.value.botAttackArrows  // Bot skip - keep existing arrows
+                _uiState.value.attackArrows  // Bot skip - keep existing arrows
             }
         )
 
@@ -299,7 +299,7 @@ class GameController(
         _gameState.value = _gameState.value.copy(gamePhase = GamePhase.REINFORCEMENT)
         _uiState.value = _uiState.value.copy(
             message = "Reinforcement Phase: All players skipped. Distributing reinforcements...",
-            botAttackArrows = emptyList(),  // Clear bot attack arrows for new round
+            attackArrows = emptyList(),  // Clear attack arrows for new round
             skippedPlayers = emptySet()  // Clear skipped players for new round
         )
     }
@@ -665,8 +665,8 @@ class GameController(
                 message = "${playerLabel(currentGameState.currentPlayerIndex, gameMode)} wins! " +
                     "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                     "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
-                botAttackArrows = if (isBotAttack) {
-                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
+                attackArrows = if (isBotAttack) {
+                    _uiState.value.attackArrows + AttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
                 } else {
                     emptyList()
                 }
@@ -680,8 +680,8 @@ class GameController(
                 message = "${playerLabel(toTerritory.owner, gameMode)} defends! " +
                     "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                     "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
-                botAttackArrows = if (isBotAttack) {
-                    _uiState.value.botAttackArrows + BotAttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
+                attackArrows = if (isBotAttack) {
+                    _uiState.value.attackArrows + AttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
                 } else {
                     emptyList()
                 }

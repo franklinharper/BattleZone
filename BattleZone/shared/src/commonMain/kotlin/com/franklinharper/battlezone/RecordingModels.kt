@@ -113,7 +113,7 @@ data class RecordedGameUiState(
     val isProcessing: Boolean = false,
     val selectedTerritoryId: Int? = null,
     val errorMessage: String? = null,
-    val botAttackArrows: List<RecordedBotAttackArrow> = emptyList()
+    val attackArrows: List<RecordedAttackArrow> = emptyList()
 )
 
 @Serializable
@@ -134,7 +134,7 @@ data class RecordedCombatResult(
 )
 
 @Serializable
-data class RecordedBotAttackArrow(
+data class RecordedAttackArrow(
     val fromTerritoryId: Int,
     val toTerritoryId: Int,
     val attackSucceeded: Boolean
@@ -291,8 +291,8 @@ private fun GameUiState.toRecordedGameUiState(): RecordedGameUiState = RecordedG
     isProcessing = isProcessing,
     selectedTerritoryId = selectedTerritoryId,
     errorMessage = errorMessage,
-    botAttackArrows = botAttackArrows.map { arrow ->
-        RecordedBotAttackArrow(
+    attackArrows = attackArrows.map { arrow ->
+        RecordedAttackArrow(
             fromTerritoryId = arrow.fromTerritoryId,
             toTerritoryId = arrow.toTerritoryId,
             attackSucceeded = arrow.attackSucceeded
@@ -318,8 +318,8 @@ private fun RecordedGameUiState.toGameUiState(): GameUiState = GameUiState(
     isProcessing = isProcessing,
     selectedTerritoryId = selectedTerritoryId,
     errorMessage = errorMessage,
-    botAttackArrows = botAttackArrows.map { arrow ->
-        BotAttackArrow(
+    attackArrows = attackArrows.map { arrow ->
+        AttackArrow(
             fromTerritoryId = arrow.fromTerritoryId,
             toTerritoryId = arrow.toTerritoryId,
             attackSucceeded = arrow.attackSucceeded

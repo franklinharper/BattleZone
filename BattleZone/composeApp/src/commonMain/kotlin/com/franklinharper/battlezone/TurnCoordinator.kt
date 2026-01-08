@@ -25,7 +25,7 @@ sealed class TurnCoordinatorAction {
 data class TurnTiming(
     val decisionDelay: Long = 0L,    // No delay - instant bot decisions
     val executionDelay: Long = 0L,   // No delay - instant execution (animations show feedback)
-    val reinforcementDelay: Long = 500L
+    val reinforcementDelay: Long = UiConstants.REINFORCEMENT_POPUP_DURATION_MS
 )
 
 /**

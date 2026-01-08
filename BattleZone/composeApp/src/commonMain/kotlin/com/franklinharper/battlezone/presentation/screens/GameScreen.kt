@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import com.franklinharper.battlezone.*
-import com.franklinharper.battlezone.presentation.components.BotAttackArrowOverlay
+import com.franklinharper.battlezone.presentation.components.AttackArrowOverlay
 import com.franklinharper.battlezone.presentation.components.MapRenderer
 import com.franklinharper.battlezone.presentation.components.PlayerStatsDisplay
 import com.franklinharper.battlezone.playerLabel
@@ -69,9 +69,6 @@ fun GameScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableStateOf(UiConstants.PLAYBACK_SPEED_NORMAL) }
 
-    // Show overlay while in reinforcement phase
-    val showReinforcementOverlay = gameState.gamePhase == GamePhase.REINFORCEMENT
-
     // Game over overlay state
     var showGameOverOverlay by remember { mutableStateOf(false) }
 
@@ -80,21 +77,6 @@ fun GameScreen(
         if (viewModel.isGameOver()) {
             showGameOverOverlay = true
         }
-    }
-
-    LaunchedEffect(isPlaying, playbackInfo.index, playbackInfo.total, playbackSpeed) {
-        if (screenMode != GameScreenMode.PLAYBACK) return@LaunchedEffect
-        if (!isPlaying) return@LaunchedEffect
-        if (playbackInfo.total <= 1) return@LaunchedEffect
-
-        val lastIndex = playbackInfo.total - 1
-        if (playbackInfo.index >= lastIndex) {
-            isPlaying = false
-            return@LaunchedEffect
-        }
-
-        kotlinx.coroutines.delay((UiConstants.PLAYBACK_STEP_DELAY_MS / playbackSpeed).toLong())
-        viewModel.seekToPlaybackIndex(playbackInfo.index + 1)
     }
 
     // Create a stable click handler
@@ -117,6 +99,13 @@ fun GameScreen(
     var eliminationMessage by remember { mutableStateOf<String?>(null) }
     var eliminationColor by remember { mutableStateOf(GameColors.ScreenBackground) }
     var lastEliminated by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var skipMessage by remember { mutableStateOf<String?>(null) }
+    var skipColor by remember { mutableStateOf(GameColors.ScreenBackground) }
+    var lastSkippedPlayers by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var reinforcementMessage by remember { mutableStateOf<String?>(null) }
+    var reinforcementShown by remember { mutableStateOf(false) }
+    var resumePlaybackAfterPopup by remember { mutableStateOf(false) }
+    val isPopupVisible = eliminationMessage != null || skipMessage != null || reinforcementMessage != null
     val clipboardManager = LocalClipboardManager.current
     val applySeed: () -> Unit = applySeed@{
         val parsedSeed = seedText.trim().toLongOrNull() ?: return@applySeed
@@ -131,8 +120,29 @@ fun GameScreen(
         seedText = gameState.map.seed?.toString().orEmpty()
     }
 
+    LaunchedEffect(isPlaying, playbackInfo.index, playbackInfo.total, playbackSpeed, isPopupVisible) {
+        if (screenMode != GameScreenMode.PLAYBACK) return@LaunchedEffect
+        if (isPopupVisible) return@LaunchedEffect
+        if (!isPlaying) return@LaunchedEffect
+        if (playbackInfo.total <= 1) return@LaunchedEffect
+
+        val lastIndex = playbackInfo.total - 1
+        if (playbackInfo.index >= lastIndex) {
+            isPlaying = false
+            return@LaunchedEffect
+        }
+
+        kotlinx.coroutines.delay((UiConstants.PLAYBACK_STEP_DELAY_MS / playbackSpeed).toLong())
+        viewModel.seekToPlaybackIndex(playbackInfo.index + 1)
+    }
+
     LaunchedEffect(gameState.eliminatedPlayers, screenMode) {
         if (screenMode != GameScreenMode.PLAYBACK) {
+            eliminationMessage = null
+            lastEliminated = gameState.eliminatedPlayers
+            return@LaunchedEffect
+        }
+        if (gameState.gamePhase == GamePhase.GAME_OVER) {
             eliminationMessage = null
             lastEliminated = gameState.eliminatedPlayers
             return@LaunchedEffect
@@ -152,6 +162,8 @@ fun GameScreen(
                 "Bot $botNumber"
             }
             eliminationColor = GameColors.getPlayerColor(newlyEliminatedBots.first())
+            resumePlaybackAfterPopup = isPlaying
+            isPlaying = false
             eliminationMessage = if (labels.size == 1) {
                 "${labels.first()} Eliminated"
             } else {
@@ -159,8 +171,60 @@ fun GameScreen(
             }
             kotlinx.coroutines.delay(UiConstants.PLAYBACK_ELIMINATION_POPUP_DURATION_MS)
             eliminationMessage = null
+            if (resumePlaybackAfterPopup) {
+                isPlaying = true
+            }
+            resumePlaybackAfterPopup = false
         }
         lastEliminated = gameState.eliminatedPlayers
+    }
+
+    LaunchedEffect(uiState.skippedPlayers, screenMode) {
+        if (screenMode != GameScreenMode.PLAYBACK) {
+            skipMessage = null
+            lastSkippedPlayers = uiState.skippedPlayers
+            return@LaunchedEffect
+        }
+
+        val newlySkipped = uiState.skippedPlayers - lastSkippedPlayers
+        if (newlySkipped.isNotEmpty()) {
+            val playerId = newlySkipped.first()
+            resumePlaybackAfterPopup = isPlaying
+            isPlaying = false
+            skipColor = GameColors.getPlayerColor(playerId)
+            skipMessage = "${playerLabel(playerId, gameMode)} skipped"
+            kotlinx.coroutines.delay(UiConstants.PLAYBACK_ELIMINATION_POPUP_DURATION_MS)
+            skipMessage = null
+            if (resumePlaybackAfterPopup) {
+                isPlaying = true
+            }
+            resumePlaybackAfterPopup = false
+        }
+        lastSkippedPlayers = uiState.skippedPlayers
+    }
+
+    LaunchedEffect(gameState.gamePhase, screenMode) {
+        if (gameState.gamePhase != GamePhase.REINFORCEMENT) {
+            reinforcementMessage = null
+            reinforcementShown = false
+            return@LaunchedEffect
+        }
+        if (reinforcementShown) return@LaunchedEffect
+
+        reinforcementShown = true
+        if (screenMode == GameScreenMode.PLAYBACK) {
+            resumePlaybackAfterPopup = isPlaying
+            isPlaying = false
+        }
+        reinforcementMessage = "Applying Reinforcements"
+        kotlinx.coroutines.delay(UiConstants.REINFORCEMENT_POPUP_DURATION_MS)
+        reinforcementMessage = null
+        if (screenMode == GameScreenMode.PLAYBACK && resumePlaybackAfterPopup) {
+            isPlaying = true
+        }
+        if (screenMode == GameScreenMode.PLAYBACK) {
+            resumePlaybackAfterPopup = false
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -287,9 +351,9 @@ fun GameScreen(
                     Text("Speed")
 
                     val speedOptions = listOf(
-                        UiConstants.PLAYBACK_SPEED_HALF to "0.5x",
                         UiConstants.PLAYBACK_SPEED_NORMAL to "1x",
-                        UiConstants.PLAYBACK_SPEED_DOUBLE to "2x"
+                        UiConstants.PLAYBACK_SPEED_DOUBLE to "2x",
+                        UiConstants.PLAYBACK_SPEED_QUADRUPLE to "4x"
                     )
                     speedOptions.forEach { (speed, label) ->
                         val selected = playbackSpeed == speed
@@ -462,9 +526,9 @@ fun GameScreen(
                                 }
                             )
 
-                            // Bot attack arrows overlay (does not block clicks) - show all bot attacks
-                            uiState.botAttackArrows.forEach { arrow ->
-                                BotAttackArrowOverlay(
+                            // Attack arrows overlay (does not block clicks) - show all attacks
+                            uiState.attackArrows.forEach { arrow ->
+                                AttackArrowOverlay(
                                     arrow = arrow,
                                     gameMap = gameState.map,
                                     cellWidth = renderParams.cellWidth,
@@ -672,46 +736,60 @@ fun GameScreen(
         }
 
         if (eliminationMessage != null) {
-            val textColor = if (eliminationColor.luminance() > 0.5f) {
-                GameColors.UiTextPrimary
-            } else {
-                GameColors.UiTextInverted
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(GameColors.OverlayScrim),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(eliminationColor, UiConstants.PLAYER_LABEL_SHAPE)
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
-                ) {
-                    Text(
-                        text = eliminationMessage ?: "",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = textColor
-                    )
-                }
-            }
+            val textColor = popupTextColor(eliminationColor)
+            PopupOverlay(
+                message = eliminationMessage ?: "",
+                backgroundColor = eliminationColor,
+                textColor = textColor
+            )
+        } else if (skipMessage != null) {
+            val textColor = popupTextColor(skipColor)
+            PopupOverlay(
+                message = skipMessage ?: "",
+                backgroundColor = skipColor,
+                textColor = textColor
+            )
+        } else if (reinforcementMessage != null) {
+            PopupOverlay(
+                message = reinforcementMessage ?: "",
+                backgroundColor = GameColors.ScreenBackground,
+                textColor = GameColors.UiTextPrimary
+            )
         }
+    }
+}
 
-        // Reinforcement overlay
-        if (showReinforcementOverlay) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(GameColors.OverlayScrim),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Applying Reinforcements",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = GameColors.UiTextInverted
-                )
-            }
+@Composable
+private fun PopupOverlay(
+    message: String,
+    backgroundColor: androidx.compose.ui.graphics.Color,
+    textColor: androidx.compose.ui.graphics.Color
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GameColors.OverlayScrim),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .background(backgroundColor, UiConstants.PLAYER_LABEL_SHAPE)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.titleMedium,
+                color = textColor
+            )
         }
+    }
+}
+
+private fun popupTextColor(backgroundColor: androidx.compose.ui.graphics.Color): androidx.compose.ui.graphics.Color {
+    return if (backgroundColor.luminance() > 0.5f) {
+        GameColors.UiTextPrimary
+    } else {
+        GameColors.UiTextInverted
     }
 }
 

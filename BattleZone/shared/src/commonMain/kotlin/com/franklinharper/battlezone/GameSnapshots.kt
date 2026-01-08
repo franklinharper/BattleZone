@@ -63,7 +63,7 @@ fun GameUiState.deepCopy(): GameUiState = GameUiState(
     isProcessing = isProcessing,
     selectedTerritoryId = selectedTerritoryId,
     errorMessage = errorMessage,
-    botAttackArrows = botAttackArrows.toList()
+    attackArrows = attackArrows.toList()
 )
 
 fun CombatResult.deepCopy(): CombatResult = CombatResult(

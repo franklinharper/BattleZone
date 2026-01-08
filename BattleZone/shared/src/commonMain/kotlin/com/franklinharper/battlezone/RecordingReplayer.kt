@@ -58,19 +58,13 @@ object RecordingReplayer {
 
         val attackerPlayerId = combatResult.attackerPlayerId
         val defenderPlayerId = combatResult.defenderPlayerId
-        val isBotAttack = isBotPlayer(gameMode, humanPlayerId, updatedState.currentPlayerIndex)
-
         val updatedCombatResults = updatedUi.playerCombatResults + (attackerPlayerId to combatResult)
         val updatedSkippedPlayers = updatedUi.skippedPlayers - attackerPlayerId
-        val botArrows = if (isBotAttack) {
-            updatedUi.botAttackArrows + BotAttackArrow(
-                fromTerritoryId = event.fromTerritoryId,
-                toTerritoryId = event.toTerritoryId,
-                attackSucceeded = combatResult.attackerWins
-            )
-        } else {
-            emptyList()
-        }
+        val attackArrow = AttackArrow(
+            fromTerritoryId = event.fromTerritoryId,
+            toTerritoryId = event.toTerritoryId,
+            attackSucceeded = combatResult.attackerWins
+        )
 
         val message = if (combatResult.attackerWins) {
             "${playerLabel(updatedState.currentPlayerIndex, gameMode)} wins! " +
@@ -86,7 +80,7 @@ object RecordingReplayer {
             playerCombatResults = updatedCombatResults,
             skippedPlayers = updatedSkippedPlayers,
             message = message,
-            botAttackArrows = botArrows
+            attackArrows = listOf(attackArrow)
         )
 
         for (playerId in 0 until map.playerCount) {
@@ -164,7 +158,7 @@ object RecordingReplayer {
         val skipUiState = updatedUi.copy(
             message = "${playerLabel(currentPlayer, gameMode)} skipped. ($skipCount/$activePlayerCount players skipped)",
             skippedPlayers = updatedUi.skippedPlayers + currentPlayer,
-            botAttackArrows = if (isHumanTurn) emptyList() else updatedUi.botAttackArrows
+            attackArrows = if (isHumanTurn) emptyList() else updatedUi.attackArrows
         )
 
         val skipGameState = normalizedState.copy(skipTracker = updatedSkipTracker)
@@ -173,7 +167,7 @@ object RecordingReplayer {
             val reinforcementState = skipGameState.copy(gamePhase = GamePhase.REINFORCEMENT)
             val reinforcementUi = skipUiState.copy(
                 message = "Reinforcement Phase: All players skipped. Distributing reinforcements...",
-                botAttackArrows = emptyList(),
+                attackArrows = emptyList(),
                 skippedPlayers = emptySet()
             )
             GameSnapshot(reinforcementState, reinforcementUi)

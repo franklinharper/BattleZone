@@ -7,7 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import com.franklinharper.battlezone.BotAttackArrow
+import com.franklinharper.battlezone.AttackArrow
 import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMap
 import com.franklinharper.battlezone.HexGeometry
@@ -16,12 +16,12 @@ import com.franklinharper.battlezone.Territory
 import kotlin.math.sqrt
 
 /**
- * Renders a static arrow showing the most recent bot attack.
+ * Renders a static arrow showing a recorded attack.
  * Arrow starts near the border on attacking side and ends shortly after crossing into defending territory.
  */
 @Composable
-fun BotAttackArrowOverlay(
-    arrow: BotAttackArrow,
+fun AttackArrowOverlay(
+    arrow: AttackArrow,
     gameMap: GameMap,
     cellWidth: Float,
     cellHeight: Float,
