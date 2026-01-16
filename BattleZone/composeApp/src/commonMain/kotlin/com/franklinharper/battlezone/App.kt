@@ -22,6 +22,7 @@ fun App() {
         var selectedRoundTimerSeconds by remember { mutableStateOf(DEFAULT_REALTIME_ROUND_TIMER_SECONDS) }
         var botDelayBaseSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS) }
         var botDelayDeltaSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_DELTA_SECONDS) }
+        var botDelayBaseText by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS.toString()) }
         var botDelayDeltaText by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_DELTA_SECONDS.toString()) }
         var viewModel by remember { mutableStateOf<GameViewModel?>(null) }
         var playbackMode by remember { mutableStateOf<GameMode?>(null) }
@@ -127,6 +128,21 @@ fun App() {
                     roundTimerSeconds = selectedRoundTimerSeconds,
                     onTurnModeChanged = { selectedTurnMode = it },
                     onRoundTimerSecondsChanged = { selectedRoundTimerSeconds = it },
+                    botDelayBaseText = botDelayBaseText,
+                    onBotDelayBaseTextChanged = { text ->
+                        botDelayBaseText = text
+                        val parsed = text.toFloatOrNull()
+                        if (parsed != null) {
+                            val clamped = parsed.coerceIn(
+                                UiConstants.BOT_DELAY_BASE_MIN_SECONDS,
+                                UiConstants.BOT_DELAY_BASE_MAX_SECONDS
+                            )
+                            botDelayBaseSeconds = clamped
+                            if (clamped != parsed) {
+                                botDelayBaseText = clamped.toString()
+                            }
+                        }
+                    },
                     botDelayDeltaText = botDelayDeltaText,
                     onBotDelayDeltaTextChanged = { text ->
                         botDelayDeltaText = text
@@ -223,7 +239,21 @@ fun App() {
                         viewModel = vm,
                         gameMode = selectedMode!!,
                         turnMode = selectedTurnMode,
-                        botDelayBaseSeconds = botDelayBaseSeconds,
+                        botDelayBaseText = botDelayBaseText,
+                        onBotDelayBaseTextChanged = { text ->
+                            botDelayBaseText = text
+                            val parsed = text.toFloatOrNull()
+                            if (parsed != null) {
+                                val clamped = parsed.coerceIn(
+                                    UiConstants.BOT_DELAY_BASE_MIN_SECONDS,
+                                    UiConstants.BOT_DELAY_BASE_MAX_SECONDS
+                                )
+                                botDelayBaseSeconds = clamped
+                                if (clamped != parsed) {
+                                    botDelayBaseText = clamped.toString()
+                                }
+                            }
+                        },
                         botDelayDeltaText = botDelayDeltaText,
                         onBotDelayDeltaTextChanged = { text ->
                             botDelayDeltaText = text
@@ -239,7 +269,6 @@ fun App() {
                                 }
                             }
                         },
-                        onBotDelayBaseSecondsChanged = { botDelayBaseSeconds = it },
                         onBackToMenu = {
                             selectedMode = null
                             viewModel = null
@@ -257,7 +286,7 @@ private fun PlaybackCoordinator(
     viewModel: GameViewModel,
     gameMode: GameMode,
     turnMode: TurnMode,
-    botDelayBaseSeconds: Int,
+    botDelayBaseSeconds: Float,
     botDelayDeltaText: String,
     onBackToMenu: () -> Unit
 ) {
@@ -265,10 +294,10 @@ private fun PlaybackCoordinator(
         viewModel = viewModel,
         gameMode = gameMode,
         turnMode = turnMode,
-        botDelayBaseSeconds = botDelayBaseSeconds,
+        botDelayBaseText = botDelayBaseSeconds.toString(),
+        onBotDelayBaseTextChanged = {},
         botDelayDeltaText = botDelayDeltaText,
         onBotDelayDeltaTextChanged = {},
-        onBotDelayBaseSecondsChanged = {},
         onBackToMenu = onBackToMenu,
         screenMode = GameScreenMode.PLAYBACK
     )

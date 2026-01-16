@@ -55,7 +55,7 @@ class TurnCoordinator(
         isCurrentPlayerBot: Boolean,
         gamePhase: GamePhase,
         hasBotDecision: Boolean,
-        botDelayBaseSeconds: Int,
+        botDelayBaseSeconds: Float,
         botDelayDeltaSeconds: Float
     ) {
         if (gamePhase == GamePhase.REINFORCEMENT) {
@@ -102,7 +102,7 @@ class TurnCoordinator(
         }
     }
 
-    private fun randomBotDelayMs(baseSeconds: Int, deltaSeconds: Float): Long {
+    private fun randomBotDelayMs(baseSeconds: Float, deltaSeconds: Float): Long {
         val clampedBase = baseSeconds.coerceIn(
             UiConstants.BOT_DELAY_BASE_MIN_SECONDS,
             UiConstants.BOT_DELAY_BASE_MAX_SECONDS

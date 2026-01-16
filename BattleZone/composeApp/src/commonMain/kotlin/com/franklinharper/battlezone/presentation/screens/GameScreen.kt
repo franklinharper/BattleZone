@@ -54,9 +54,9 @@ fun GameScreen(
     viewModel: GameViewModel,
     gameMode: GameMode,
     turnMode: TurnMode,
-    botDelayBaseSeconds: Int,
+    botDelayBaseText: String,
+    onBotDelayBaseTextChanged: (String) -> Unit,
     botDelayDeltaText: String,
-    onBotDelayBaseSecondsChanged: (Int) -> Unit,
     onBotDelayDeltaTextChanged: (String) -> Unit,
     onBackToMenu: () -> Unit,
     screenMode: GameScreenMode = GameScreenMode.PLAY
@@ -423,18 +423,17 @@ fun GameScreen(
         if (screenMode == GameScreenMode.PLAY && turnMode == TurnMode.REAL_TIME) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Bot Delay")
-                BotDelayStepper(
-                    label = "Base (s)",
-                    value = botDelayBaseSeconds,
-                    min = UiConstants.BOT_DELAY_BASE_MIN_SECONDS,
-                    max = UiConstants.BOT_DELAY_BASE_MAX_SECONDS,
-                    onValueChanged = onBotDelayBaseSecondsChanged
+                TextField(
+                    value = botDelayBaseText,
+                    onValueChange = onBotDelayBaseTextChanged,
+                    singleLine = true,
+                    modifier = Modifier.width(UiConstants.BOT_DELAY_DELTA_FIELD_WIDTH)
                 )
-                Text("Delta (s)")
+                Text("Delta")
                 TextField(
                     value = botDelayDeltaText,
                     onValueChange = onBotDelayDeltaTextChanged,
@@ -822,35 +821,6 @@ private fun popupTextColor(backgroundColor: androidx.compose.ui.graphics.Color):
         GameColors.UiTextPrimary
     } else {
         GameColors.UiTextInverted
-    }
-}
-
-@Composable
-private fun BotDelayStepper(
-    label: String,
-    value: Int,
-    min: Int,
-    max: Int,
-    onValueChanged: (Int) -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(label)
-        OutlinedButton(
-            onClick = { onValueChanged((value - 1).coerceAtLeast(min)) },
-            enabled = value > min
-        ) {
-            Text("-")
-        }
-        Text(value.toString(), style = MaterialTheme.typography.bodyLarge)
-        OutlinedButton(
-            onClick = { onValueChanged((value + 1).coerceAtMost(max)) },
-            enabled = value < max
-        ) {
-            Text("+")
-        }
     }
 }
 
