@@ -498,7 +498,16 @@ class GameController(
 
             // Validate the attack
             if (territory.owner == humanPlayerId) {
-                _uiState.value = currentUiState.copy(errorMessage = "Cannot attack your own territory")
+                // If clicking on own territory, change selection to this territory
+                if (territory.armyCount < GameRules.MIN_ARMIES_TO_ATTACK) {
+                    _uiState.value = currentUiState.copy(errorMessage = "Territory must have more than 1 army to attack")
+                    return
+                }
+                _uiState.value = currentUiState.copy(
+                    selectedTerritoryId = territoryId,
+                    errorMessage = null,
+                    message = "Territory $territoryId selected. Now select an adjacent enemy territory to attack."
+                )
                 return
             }
 
