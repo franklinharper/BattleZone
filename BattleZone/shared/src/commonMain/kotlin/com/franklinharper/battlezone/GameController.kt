@@ -728,9 +728,16 @@ class GameController(
         if (combatResult.attackerWins) {
             val updatedCombatResults = _uiState.value.playerCombatResults + (attackerPlayerId to combatResult)
             debugLog { "DEBUG: Storing combat result for attacker $attackerPlayerId. Map now has ${updatedCombatResults.size} entries" }
+
+            // Clear selection if the conquered territory was selected by the human player
+            val currentSelectedId = _uiState.value.selectedTerritoryId
+            val shouldClearSelection = currentSelectedId == toTerritoryId &&
+                                       defenderPlayerId == humanPlayerId
+
             _uiState.value = _uiState.value.copy(
                 playerCombatResults = updatedCombatResults,
                 skippedPlayers = _uiState.value.skippedPlayers - attackerPlayerId,
+                selectedTerritoryId = if (shouldClearSelection) null else currentSelectedId,
                 message = "${playerLabel(attackerPlayerId, gameMode)} wins! " +
                     "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                     "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
