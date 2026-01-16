@@ -39,6 +39,9 @@ class GameViewModel(
     /** Observable playback info */
     val playbackInfo: StateFlow<PlaybackInfo> = controller.playbackInfo
 
+    /** Observable real-time pause state */
+    val realTimePaused: StateFlow<Boolean> = controller.realTimePaused
+
     // Game control methods
 
     /** Request the current bot to make a decision */
@@ -100,6 +103,9 @@ class GameViewModel(
 
     /** Set a user-visible error message */
     fun setErrorMessage(message: String?) = controller.setErrorMessage(message)
+
+    /** Pause or resume the real-time round timer */
+    fun setRealTimePaused(paused: Boolean) = controller.setRealTimePaused(paused)
 
     // Status methods
 

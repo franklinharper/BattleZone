@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.franklinharper.battlezone.DEFAULT_REALTIME_ROUND_TIMER_SECONDS
+import com.franklinharper.battlezone.AttackArrowRenderingOption
 import com.franklinharper.battlezone.GameMode
 import com.franklinharper.battlezone.MAX_PLAYERS
 import com.franklinharper.battlezone.MIN_PLAYERS
@@ -40,6 +41,8 @@ fun PlayerCountSelectionScreen(
     roundTimerSeconds: Int = DEFAULT_REALTIME_ROUND_TIMER_SECONDS,
     onTurnModeChanged: (TurnMode) -> Unit,
     onRoundTimerSecondsChanged: (Int) -> Unit,
+    attackArrowRenderingOption: AttackArrowRenderingOption,
+    onAttackArrowRenderingOptionChanged: (AttackArrowRenderingOption) -> Unit,
     botDelayBaseText: String,
     onBotDelayBaseTextChanged: (String) -> Unit,
     botDelayDeltaText: String,
@@ -158,6 +161,36 @@ fun PlayerCountSelectionScreen(
                 singleLine = true,
                 modifier = Modifier.width(UiConstants.BOT_DELAY_DELTA_FIELD_WIDTH)
             )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Attack Arrows")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModeOptionRow(
+                    selected = attackArrowRenderingOption ==
+                        AttackArrowRenderingOption.ATTACKER_COLOR_SHAFT_RESULT_HEAD,
+                    label = "Attacker color shaft + red/green head",
+                    onSelect = {
+                        onAttackArrowRenderingOptionChanged(
+                            AttackArrowRenderingOption.ATTACKER_COLOR_SHAFT_RESULT_HEAD
+                        )
+                    }
+                )
+                ModeOptionRow(
+                    selected = attackArrowRenderingOption ==
+                        AttackArrowRenderingOption.MIDPOINT_BADGE_CURRENT_COLORS,
+                    label = "Midpoint badge + current arrow colors",
+                    onSelect = {
+                        onAttackArrowRenderingOptionChanged(
+                            AttackArrowRenderingOption.MIDPOINT_BADGE_CURRENT_COLORS
+                        )
+                    }
+                )
+            }
         }
 
         // Player count selection row

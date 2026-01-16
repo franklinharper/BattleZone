@@ -21,6 +21,9 @@ fun App() {
         var selectedTurnMode by remember { mutableStateOf(TurnMode.REAL_TIME) }
         var selectedRoundTimerSeconds by remember { mutableStateOf(DEFAULT_REALTIME_ROUND_TIMER_SECONDS) }
         var selectedPlayerCount by remember { mutableStateOf<Int?>(7) }
+        var selectedAttackArrowRenderingOption by remember {
+            mutableStateOf(AttackArrowRenderingOption.MIDPOINT_BADGE_CURRENT_COLORS)
+        }
         var botDelayBaseSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS) }
         var botDelayDeltaSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_DELTA_SECONDS) }
         var botDelayBaseText by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS.toString()) }
@@ -129,6 +132,8 @@ fun App() {
                     roundTimerSeconds = selectedRoundTimerSeconds,
                     onTurnModeChanged = { selectedTurnMode = it },
                     onRoundTimerSecondsChanged = { selectedRoundTimerSeconds = it },
+                    attackArrowRenderingOption = selectedAttackArrowRenderingOption,
+                    onAttackArrowRenderingOptionChanged = { selectedAttackArrowRenderingOption = it },
                     botDelayBaseText = botDelayBaseText,
                     onBotDelayBaseTextChanged = { text ->
                         botDelayBaseText = text
@@ -201,6 +206,7 @@ fun App() {
                     val gameState by vm.gameState.collectAsState()
                     val uiState by vm.uiState.collectAsState()
                     val replayMode by vm.replayMode.collectAsState()
+                    val realTimePaused by vm.realTimePaused.collectAsState()
 
                     // Turn coordinator for bot moves
                     val scope = rememberCoroutineScope()
@@ -213,16 +219,20 @@ fun App() {
                         gameState.gamePhase,
                         uiState.currentBotDecision,
                         replayMode,
+                        realTimePaused,
                         selectedTurnMode,
                         botDelayBaseSeconds,
                         botDelayDeltaSeconds
                     ) {
                         if (!replayMode) {
-                        turnCoordinator.coordinateTurn(
-                            gameMode = selectedMode!!,
-                            turnMode = selectedTurnMode,
-                            isCurrentPlayerBot = vm.isCurrentPlayerBot(),
-                            gamePhase = gameState.gamePhase,
+                            if (selectedTurnMode == TurnMode.REAL_TIME && realTimePaused) {
+                                return@LaunchedEffect
+                            }
+                            turnCoordinator.coordinateTurn(
+                                gameMode = selectedMode!!,
+                                turnMode = selectedTurnMode,
+                                isCurrentPlayerBot = vm.isCurrentPlayerBot(),
+                                gamePhase = gameState.gamePhase,
                             hasBotDecision = uiState.currentBotDecision != null,
                             botDelayBaseSeconds = botDelayBaseSeconds,
                             botDelayDeltaSeconds = botDelayDeltaSeconds
@@ -234,6 +244,9 @@ fun App() {
                     LaunchedEffect(Unit) {
                         turnCoordinator.actions.collectLatest { action ->
                             if (!replayMode) {
+                                if (selectedTurnMode == TurnMode.REAL_TIME && realTimePaused) {
+                                    return@collectLatest
+                                }
                                 when (action) {
                                     TurnCoordinatorAction.RequestBotDecision -> vm.requestBotDecision()
                                     TurnCoordinatorAction.ExecuteBotDecision -> vm.executeBotDecision()
@@ -247,6 +260,8 @@ fun App() {
                         viewModel = vm,
                         gameMode = selectedMode!!,
                         turnMode = selectedTurnMode,
+                        attackArrowRenderingOption = selectedAttackArrowRenderingOption,
+                        realTimePaused = realTimePaused,
                         botDelayBaseText = botDelayBaseText,
                         onBotDelayBaseTextChanged = { text ->
                             botDelayBaseText = text
@@ -302,6 +317,8 @@ private fun PlaybackCoordinator(
         viewModel = viewModel,
         gameMode = gameMode,
         turnMode = turnMode,
+        attackArrowRenderingOption = AttackArrowRenderingOption.MIDPOINT_BADGE_CURRENT_COLORS,
+        realTimePaused = false,
         botDelayBaseText = botDelayBaseSeconds.toString(),
         onBotDelayBaseTextChanged = {},
         botDelayDeltaText = botDelayDeltaText,

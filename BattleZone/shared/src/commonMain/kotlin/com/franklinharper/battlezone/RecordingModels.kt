@@ -139,6 +139,7 @@ data class RecordedCombatResult(
 data class RecordedAttackArrow(
     val fromTerritoryId: Int,
     val toTerritoryId: Int,
+    val attackerPlayerId: Int = UNKNOWN_PLAYER_ID,
     val attackSucceeded: Boolean
 )
 
@@ -297,6 +298,7 @@ private fun GameUiState.toRecordedGameUiState(): RecordedGameUiState = RecordedG
         RecordedAttackArrow(
             fromTerritoryId = arrow.fromTerritoryId,
             toTerritoryId = arrow.toTerritoryId,
+            attackerPlayerId = arrow.attackerPlayerId,
             attackSucceeded = arrow.attackSucceeded
         )
     }
@@ -324,6 +326,7 @@ private fun RecordedGameUiState.toGameUiState(): GameUiState = GameUiState(
         AttackArrow(
             fromTerritoryId = arrow.fromTerritoryId,
             toTerritoryId = arrow.toTerritoryId,
+            attackerPlayerId = arrow.attackerPlayerId,
             attackSucceeded = arrow.attackSucceeded
         )
     }

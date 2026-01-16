@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import com.franklinharper.battlezone.*
 import com.franklinharper.battlezone.presentation.components.AttackArrowOverlay
@@ -54,6 +55,8 @@ fun GameScreen(
     viewModel: GameViewModel,
     gameMode: GameMode,
     turnMode: TurnMode,
+    attackArrowRenderingOption: AttackArrowRenderingOption,
+    realTimePaused: Boolean,
     botDelayBaseText: String,
     onBotDelayBaseTextChanged: (String) -> Unit,
     botDelayDeltaText: String,
@@ -68,7 +71,7 @@ fun GameScreen(
     val playbackInfo by viewModel.playbackInfo.collectAsState()
 
     val isHumanVsBot = gameMode == GameMode.HUMAN_VS_BOT
-    val allowInput = !replayMode
+    val allowInput = !replayMode && !(turnMode == TurnMode.REAL_TIME && realTimePaused)
     val filePicker = rememberRecordingFilePicker()
     val coroutineScope = rememberCoroutineScope()
     var isPlaying by remember { mutableStateOf(false) }
@@ -262,10 +265,6 @@ fun GameScreen(
         ) {
             when (screenMode) {
                 GameScreenMode.PLAY -> {
-                    Button(onClick = onBackToMenu) {
-                        Text("← Back to Menu")
-                    }
-
                     Button(
                         onClick = {
                             val newMap = MapGenerator.generate(playerCount = gameState.map.playerCount)
@@ -290,6 +289,14 @@ fun GameScreen(
                                 }
                             }
                         )
+                    }
+
+                    if (turnMode == TurnMode.REAL_TIME) {
+                        Button(
+                            onClick = { viewModel.setRealTimePaused(!realTimePaused) }
+                        ) {
+                            Text(if (realTimePaused) "Resume" else "Pause")
+                        }
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -328,10 +335,6 @@ fun GameScreen(
                     }
                 }
                 GameScreenMode.PLAYBACK -> {
-                    Button(onClick = onBackToMenu) {
-                        Text("← Back to Menu")
-                    }
-
                     Button(
                         onClick = { isPlaying = !isPlaying },
                         enabled = playbackInfo.total > 1
@@ -553,6 +556,7 @@ fun GameScreen(
                                     gameMap = gameState.map,
                                     cellWidth = renderParams.cellWidth,
                                     cellHeight = renderParams.cellHeight,
+                                    renderingOption = attackArrowRenderingOption,
                                     modifier = Modifier.matchParentSize()
                                 )
                             }
@@ -712,6 +716,20 @@ fun GameScreen(
                 }
             }
         }
+        }
+
+        // Back arrow button at top-left corner
+        IconButton(
+            onClick = onBackToMenu,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back to menu",
+                tint = GameColors.UiTextPrimary
+            )
         }
 
         // Game over overlay

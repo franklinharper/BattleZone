@@ -57,6 +57,7 @@ data class CombatResult(
 data class AttackArrow(
     val fromTerritoryId: Int,
     val toTerritoryId: Int,
+    val attackerPlayerId: Int = UNKNOWN_PLAYER_ID,
     val attackSucceeded: Boolean
 )
 
@@ -112,6 +113,9 @@ class GameController(
 
     private val _playbackInfo = MutableStateFlow(PlaybackInfo(index = 0, total = 1))
     val playbackInfo: StateFlow<PlaybackInfo> = _playbackInfo.asStateFlow()
+
+    private val _realTimePaused = MutableStateFlow(false)
+    val realTimePaused: StateFlow<Boolean> = _realTimePaused.asStateFlow()
 
     init {
         resetHistory()
@@ -419,6 +423,7 @@ class GameController(
         _gameState.value = createInitialGameState(map)
         _uiState.value = GameUiState(message = "New game started! ${playerLabel(_gameState.value.currentPlayerIndex, gameMode)} goes first.")
         _replayMode.value = false
+        _realTimePaused.value = false
         recordingEnabled = true
         resetHistory()
         resetRealTimeTimer()
@@ -692,6 +697,10 @@ class GameController(
 
     private fun canMutateGame(): Boolean {
         if (!_replayMode.value) {
+            if (turnMode == TurnMode.REAL_TIME && _realTimePaused.value) {
+                _uiState.value = _uiState.value.copy(errorMessage = "Game is paused.")
+                return false
+            }
             return true
         }
         _uiState.value = _uiState.value.copy(errorMessage = "Replay mode is read-only.")
@@ -752,7 +761,12 @@ class GameController(
                     "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                     "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 attackArrows = if (isBotAttack) {
-                    _uiState.value.attackArrows + AttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = true)
+                    _uiState.value.attackArrows + AttackArrow(
+                        fromTerritoryId = fromTerritoryId,
+                        toTerritoryId = toTerritoryId,
+                        attackerPlayerId = attackerPlayerId,
+                        attackSucceeded = true
+                    )
                 } else {
                     emptyList()
                 }
@@ -767,7 +781,12 @@ class GameController(
                     "Attacker: ${combatResult.attackerRoll.joinToString("+")} = ${combatResult.attackerTotal} | " +
                     "Defender: ${combatResult.defenderRoll.joinToString("+")} = ${combatResult.defenderTotal}",
                 attackArrows = if (isBotAttack) {
-                    _uiState.value.attackArrows + AttackArrow(fromTerritoryId, toTerritoryId, attackSucceeded = false)
+                    _uiState.value.attackArrows + AttackArrow(
+                        fromTerritoryId = fromTerritoryId,
+                        toTerritoryId = toTerritoryId,
+                        attackerPlayerId = attackerPlayerId,
+                        attackSucceeded = false
+                    )
                 } else {
                     emptyList()
                 }
@@ -855,6 +874,7 @@ class GameController(
     private fun resetRealTimeTimer() {
         if (turnMode != TurnMode.REAL_TIME) return
         if (_replayMode.value) return
+        if (_realTimePaused.value) return
         if (_gameState.value.gamePhase != GamePhase.ATTACK) return
         cancelRealTimeTimer()
         realTimeTimerJob = realTimeScope.launch {
@@ -868,5 +888,16 @@ class GameController(
     private fun cancelRealTimeTimer() {
         realTimeTimerJob?.cancel()
         realTimeTimerJob = null
+    }
+
+    fun setRealTimePaused(paused: Boolean) {
+        if (turnMode != TurnMode.REAL_TIME) return
+        if (_realTimePaused.value == paused) return
+        _realTimePaused.value = paused
+        if (paused) {
+            cancelRealTimeTimer()
+        } else {
+            resetRealTimeTimer()
+        }
     }
 }

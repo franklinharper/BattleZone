@@ -6,14 +6,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.franklinharper.battlezone.AttackArrow
+import com.franklinharper.battlezone.AttackArrowRenderingOption
 import com.franklinharper.battlezone.GameColors
 import com.franklinharper.battlezone.GameMap
 import com.franklinharper.battlezone.HexGeometry
 import com.franklinharper.battlezone.HexGrid
 import com.franklinharper.battlezone.Territory
+import com.franklinharper.battlezone.UNKNOWN_PLAYER_ID
 import kotlin.math.sqrt
+
+private const val ARROW_START_OFFSET_PX = 20f
+private const val ARROW_END_OFFSET_PX = 25f
+private const val ARROW_STROKE_WIDTH_PX = 4f
+private const val ARROW_OUTLINE_WIDTH_PX = 2f
+private const val ARROW_HEAD_LENGTH_PX = 12f
+private const val ARROW_HEAD_WIDTH_PX = 8f
+private const val BADGE_RADIUS_PX = 10f
+private const val BADGE_OUTLINE_WIDTH_PX = 2f
 
 /**
  * Renders a static arrow showing a recorded attack.
@@ -25,6 +37,7 @@ fun AttackArrowOverlay(
     gameMap: GameMap,
     cellWidth: Float,
     cellHeight: Float,
+    renderingOption: AttackArrowRenderingOption,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -44,28 +57,63 @@ fun AttackArrowOverlay(
 
         // Arrow starts slightly before border (on attacking side)
         // Arrow ends slightly after border (on defending side)
-        val startOffset = 20f  // Distance before border
-        val endOffset = 25f    // Distance after border
-
         val start = Offset(
-            borderPoint.x - borderPoint.normalX * startOffset,
-            borderPoint.y - borderPoint.normalY * startOffset
+            borderPoint.x - borderPoint.normalX * ARROW_START_OFFSET_PX,
+            borderPoint.y - borderPoint.normalY * ARROW_START_OFFSET_PX
         )
 
         val end = Offset(
-            borderPoint.x + borderPoint.normalX * endOffset,
-            borderPoint.y + borderPoint.normalY * endOffset
+            borderPoint.x + borderPoint.normalX * ARROW_END_OFFSET_PX,
+            borderPoint.y + borderPoint.normalY * ARROW_END_OFFSET_PX
         )
 
-        // Draw arrow crossing the border
-        drawArrowWithOutline(
-            start = start,
-            end = end,
-            color = if (arrow.attackSucceeded) GameColors.BotArrowSuccess else GameColors.BotArrowFailure,
-            outlineColor = GameColors.BotArrowOutline,
-            strokeWidth = 4f,
-            outlineWidth = 2f
-        )
+        val attackerPlayerId = if (arrow.attackerPlayerId != UNKNOWN_PLAYER_ID) {
+            arrow.attackerPlayerId
+        } else {
+            fromTerritory.owner
+        }
+        val attackerColor = GameColors.getPlayerColor(attackerPlayerId)
+
+        when (renderingOption) {
+            AttackArrowRenderingOption.ATTACKER_COLOR_SHAFT_RESULT_HEAD -> {
+                val headColor = if (arrow.attackSucceeded) {
+                    GameColors.AttackArrowHeadSuccess
+                } else {
+                    GameColors.AttackArrowHeadFailure
+                }
+                drawArrowWithOutline(
+                    start = start,
+                    end = end,
+                    lineColor = attackerColor,
+                    headColor = headColor,
+                    outlineColor = GameColors.BotArrowOutline,
+                    strokeWidth = ARROW_STROKE_WIDTH_PX,
+                    outlineWidth = ARROW_OUTLINE_WIDTH_PX
+                )
+            }
+            AttackArrowRenderingOption.MIDPOINT_BADGE_CURRENT_COLORS -> {
+                val arrowColor = if (arrow.attackSucceeded) {
+                    GameColors.BotArrowSuccess
+                } else {
+                    GameColors.BotArrowFailure
+                }
+                drawArrowWithOutline(
+                    start = start,
+                    end = end,
+                    lineColor = arrowColor,
+                    headColor = arrowColor,
+                    outlineColor = GameColors.BotArrowOutline,
+                    strokeWidth = ARROW_STROKE_WIDTH_PX,
+                    outlineWidth = ARROW_OUTLINE_WIDTH_PX
+                )
+                drawMidpointBadge(
+                    start = start,
+                    end = end,
+                    fillColor = attackerColor,
+                    outlineColor = GameColors.BotArrowOutline
+                )
+            }
+        }
     }
 }
 
@@ -160,7 +208,8 @@ private fun getTerritoryCenter(
 private fun DrawScope.drawArrowWithOutline(
     start: Offset,
     end: Offset,
-    color: Color,
+    lineColor: Color,
+    headColor: Color,
     outlineColor: Color,
     strokeWidth: Float,
     outlineWidth: Float
@@ -176,8 +225,8 @@ private fun DrawScope.drawArrowWithOutline(
     val unitY = dy / length
 
     // Arrowhead size
-    val headLength = 12f
-    val headWidth = 8f
+    val headLength = ARROW_HEAD_LENGTH_PX
+    val headWidth = ARROW_HEAD_WIDTH_PX
 
     // Arrowhead points
     val tipX = end.x
@@ -211,7 +260,7 @@ private fun DrawScope.drawArrowWithOutline(
 
     // Draw main arrow line
     drawLine(
-        color = color,
+        color = lineColor,
         start = start,
         end = end,
         strokeWidth = strokeWidth
@@ -224,5 +273,33 @@ private fun DrawScope.drawArrowWithOutline(
         lineTo(arrowPoint2.x, arrowPoint2.y)
         close()
     }
-    drawPath(arrowPath, color = color)
+    drawPath(arrowPath, color = headColor)
+}
+
+private fun DrawScope.drawMidpointBadge(
+    start: Offset,
+    end: Offset,
+    fillColor: Color,
+    outlineColor: Color
+) {
+    val midpoint = Offset(
+        (start.x + end.x) / 2f,
+        (start.y + end.y) / 2f
+    )
+    drawCircle(
+        color = outlineColor,
+        radius = BADGE_RADIUS_PX + BADGE_OUTLINE_WIDTH_PX,
+        center = midpoint
+    )
+    drawCircle(
+        color = fillColor,
+        radius = BADGE_RADIUS_PX,
+        center = midpoint
+    )
+    drawCircle(
+        color = outlineColor,
+        radius = BADGE_RADIUS_PX,
+        center = midpoint,
+        style = Stroke(width = BADGE_OUTLINE_WIDTH_PX)
+    )
 }

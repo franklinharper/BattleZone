@@ -66,6 +66,7 @@ object RecordingReplayer {
         val attackArrow = AttackArrow(
             fromTerritoryId = event.fromTerritoryId,
             toTerritoryId = event.toTerritoryId,
+            attackerPlayerId = attackerPlayerId,
             attackSucceeded = combatResult.attackerWins
         )
 

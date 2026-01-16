@@ -89,6 +89,8 @@ object GameColors {
     val BotArrowSuccess = Color(0xFFFF0000)
     val BotArrowFailure = Color(0xFF0000FF)
     val BotArrowOutline = Color(0xFFFFFFFF)
+    val AttackArrowHeadSuccess = GameOverWin
+    val AttackArrowHeadFailure = GameOverLoss
 
     /**
      * Fallback color for unknown player ID
