@@ -20,6 +20,7 @@ fun App() {
         var selectedMode by remember { mutableStateOf<GameMode?>(null) }
         var selectedTurnMode by remember { mutableStateOf(TurnMode.REAL_TIME) }
         var selectedRoundTimerSeconds by remember { mutableStateOf(DEFAULT_REALTIME_ROUND_TIMER_SECONDS) }
+        var selectedPlayerCount by remember { mutableStateOf<Int?>(7) }
         var botDelayBaseSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS) }
         var botDelayDeltaSeconds by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_DELTA_SECONDS) }
         var botDelayBaseText by remember { mutableStateOf(UiConstants.DEFAULT_BOT_DELAY_BASE_SECONDS.toString()) }
@@ -158,30 +159,37 @@ fun App() {
                             }
                         }
                     },
-                    onPlayerCountSelected = { playerCount ->
-                        // Generate map with the selected player count
-                        val initialMap = MapGenerator.generate(playerCount = playerCount)
+                    selectedPlayerCount = selectedPlayerCount,
+                    onPlayerCountChanged = { playerCount ->
+                        selectedPlayerCount = playerCount
+                    },
+                    onStartGame = {
+                        selectedPlayerCount?.let { playerCount ->
+                            // Generate map with the selected player count
+                            val initialMap = MapGenerator.generate(playerCount = playerCount)
 
-                        // Create bots array
-                        val bots: Array<Bot> = Array(
-                            if (selectedMode == GameMode.HUMAN_VS_BOT)
-                                playerCount - 1  // Bots for players 1-N
-                            else
-                                playerCount      // All players are bots
-                        ) { DefaultBot(initialMap.gameRandom) }
+                            // Create bots array
+                            val bots: Array<Bot> = Array(
+                                if (selectedMode == GameMode.HUMAN_VS_BOT)
+                                    playerCount - 1  // Bots for players 1-N
+                                else
+                                    playerCount      // All players are bots
+                            ) { DefaultBot(initialMap.gameRandom) }
 
-                        // Create view model with new configuration
-                        viewModel = GameViewModel(
-                            initialMap = initialMap,
-                            gameMode = selectedMode!!,
-                            humanPlayerId = 0,
-                            bots = bots,
-                            turnMode = selectedTurnMode,
-                            roundTimerSeconds = selectedRoundTimerSeconds
-                        )
+                            // Create view model with new configuration
+                            viewModel = GameViewModel(
+                                initialMap = initialMap,
+                                gameMode = selectedMode!!,
+                                humanPlayerId = 0,
+                                bots = bots,
+                                turnMode = selectedTurnMode,
+                                roundTimerSeconds = selectedRoundTimerSeconds
+                            )
+                        }
                     },
                     onBack = {
                         selectedMode = null
+                        selectedPlayerCount = null
                     }
                 )
             }

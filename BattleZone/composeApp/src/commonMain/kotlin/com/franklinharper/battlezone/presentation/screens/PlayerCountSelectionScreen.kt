@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -42,7 +44,9 @@ fun PlayerCountSelectionScreen(
     onBotDelayBaseTextChanged: (String) -> Unit,
     botDelayDeltaText: String,
     onBotDelayDeltaTextChanged: (String) -> Unit,
-    onPlayerCountSelected: (Int) -> Unit,
+    selectedPlayerCount: Int?,
+    onPlayerCountChanged: (Int) -> Unit,
+    onStartGame: () -> Unit,
     onBack: () -> Unit
 ) {
     Box(
@@ -158,21 +162,44 @@ fun PlayerCountSelectionScreen(
 
         // Player count selection row
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Players")
             for (playerCount in MIN_PLAYERS..MAX_PLAYERS) {
-                Button(
-                    onClick = { onPlayerCountSelected(playerCount) }
-                ) {
-                    Text(
-                        text = playerCount.toString(),
-                        style = MaterialTheme.typography.titleLarge
-                    )
+                val isSelected = selectedPlayerCount == playerCount
+                if (isSelected) {
+                    Button(
+                        onClick = { onPlayerCountChanged(playerCount) }
+                    ) {
+                        Text(
+                            text = playerCount.toString(),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { onPlayerCountChanged(playerCount) }
+                    ) {
+                        Text(
+                            text = playerCount.toString(),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
                 }
             }
+        }
+
+        // Start button
+        Button(
+            onClick = onStartGame,
+            enabled = selectedPlayerCount != null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp)
+        ) {
+            Text("Start Game", style = MaterialTheme.typography.titleLarge)
         }
         }
     }
