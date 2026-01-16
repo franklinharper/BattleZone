@@ -427,19 +427,9 @@ fun GameScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Bot Delay")
-                TextField(
-                    value = botDelayBaseText,
-                    onValueChange = onBotDelayBaseTextChanged,
-                    singleLine = true,
-                    modifier = Modifier.width(UiConstants.BOT_DELAY_DELTA_FIELD_WIDTH)
-                )
+                Text(botDelayBaseText)
                 Text("Delta")
-                TextField(
-                    value = botDelayDeltaText,
-                    onValueChange = onBotDelayDeltaTextChanged,
-                    singleLine = true,
-                    modifier = Modifier.width(UiConstants.BOT_DELAY_DELTA_FIELD_WIDTH)
-                )
+                Text(botDelayDeltaText)
             }
         }
 
