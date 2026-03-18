@@ -99,7 +99,7 @@ class GameController(
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
 
-    private val _events = MutableSharedFlow<GameEvent>()
+    private val _events = MutableSharedFlow<GameEvent>(extraBufferCapacity = EVENT_BUFFER_CAPACITY)
     val events: SharedFlow<GameEvent> = _events.asSharedFlow()
 
     private val undoStack = ArrayDeque<GameSnapshot>()
@@ -245,6 +245,13 @@ class GameController(
             combatResult = combatResult,
             mutateMap = false
         )
+        emitEvent(
+            GameEvent.AttackExecuted(
+                fromTerritoryId = fromTerritoryId,
+                toTerritoryId = toTerritoryId,
+                result = combatResult
+            )
+        )
 
         recordAction(
             RecordedEvent.Attack(
@@ -295,6 +302,7 @@ class GameController(
         } else {
             nextPlayer()
         }
+        emitEvent(GameEvent.TurnSkipped(currentPlayer))
         recordAction(RecordedEvent.Skip(playerId = currentPlayer))
         recordSnapshot()
     }
@@ -356,6 +364,7 @@ class GameController(
             attackArrows = emptyList(),  // Clear attack arrows for new round
             skippedPlayers = emptySet()  // Clear skipped players for new round
         )
+        emitEvent(GameEvent.ReinforcementPhaseStarted)
     }
 
     /**
@@ -411,6 +420,14 @@ class GameController(
                 currentState.players[playerId].copy()
             }
         )
+        val player0Reinforcements = reinforcementResults.firstOrNull { it.playerId == 0 }?.territoryIncrements?.sum() ?: 0
+        val player1Reinforcements = reinforcementResults.firstOrNull { it.playerId == 1 }?.territoryIncrements?.sum() ?: 0
+        emitEvent(
+            GameEvent.ReinforcementPhaseCompleted(
+                player0Reinforcements = player0Reinforcements,
+                player1Reinforcements = player1Reinforcements
+            )
+        )
         recordAction(RecordedEvent.Reinforcement(players = reinforcementResults))
         recordSnapshot()
         resetRealTimeTimer()
@@ -427,6 +444,7 @@ class GameController(
         recordingEnabled = true
         resetHistory()
         resetRealTimeTimer()
+        emitEvent(GameEvent.GameStarted(_gameState.value.currentPlayerIndex))
     }
 
     /**
@@ -833,6 +851,7 @@ class GameController(
             _uiState.value = _uiState.value.copy(
                 message = "🎉 ${playerLabel(winner, gameMode)} wins the game! 🎉"
             )
+            emitEvent(GameEvent.GameEnded(winner))
             cancelRealTimeTimer()
             return
         }
@@ -899,5 +918,13 @@ class GameController(
         } else {
             resetRealTimeTimer()
         }
+    }
+
+    private fun emitEvent(event: GameEvent) {
+        _events.tryEmit(event)
+    }
+
+    companion object {
+        private const val EVENT_BUFFER_CAPACITY = 32
     }
 }

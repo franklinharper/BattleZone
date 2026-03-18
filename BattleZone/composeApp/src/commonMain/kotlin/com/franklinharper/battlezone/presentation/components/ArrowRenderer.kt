@@ -38,6 +38,7 @@ fun AttackArrowOverlay(
     cellWidth: Float,
     cellHeight: Float,
     renderingOption: AttackArrowRenderingOption,
+    showBadge: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -106,12 +107,14 @@ fun AttackArrowOverlay(
                     strokeWidth = ARROW_STROKE_WIDTH_PX,
                     outlineWidth = ARROW_OUTLINE_WIDTH_PX
                 )
-                drawMidpointBadge(
-                    start = start,
-                    end = end,
-                    fillColor = attackerColor,
-                    outlineColor = GameColors.BotArrowOutline
-                )
+                if (showBadge) {
+                    drawMidpointBadge(
+                        start = start,
+                        end = end,
+                        fillColor = attackerColor,
+                        outlineColor = GameColors.BotArrowOutline
+                    )
+                }
             }
         }
     }

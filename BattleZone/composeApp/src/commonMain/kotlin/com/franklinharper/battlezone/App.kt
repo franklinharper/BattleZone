@@ -8,6 +8,7 @@ import com.franklinharper.battlezone.presentation.screens.ModeSelectionScreen
 import com.franklinharper.battlezone.presentation.screens.PlayerCountSelectionScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 /**
@@ -16,6 +17,13 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 @Composable
 @Preview
 fun App() {
+    App(onGameEvent = {})
+}
+
+@Composable
+fun App(
+    onGameEvent: (GameEvent) -> Unit
+) {
     MaterialTheme {
         var selectedMode by remember { mutableStateOf<GameMode?>(null) }
         var selectedTurnMode by remember { mutableStateOf(TurnMode.REAL_TIME) }
@@ -253,6 +261,12 @@ fun App() {
                                     TurnCoordinatorAction.ExecuteReinforcement -> vm.executeReinforcementPhase()
                                 }
                             }
+                        }
+                    }
+
+                    LaunchedEffect(vm) {
+                        vm.events.collect { event ->
+                            onGameEvent(event)
                         }
                     }
 

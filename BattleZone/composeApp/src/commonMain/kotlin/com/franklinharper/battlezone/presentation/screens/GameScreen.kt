@@ -557,6 +557,7 @@ fun GameScreen(
                                     cellWidth = renderParams.cellWidth,
                                     cellHeight = renderParams.cellHeight,
                                     renderingOption = attackArrowRenderingOption,
+                                    showBadge = turnMode != TurnMode.TURN_BASED,
                                     modifier = Modifier.matchParentSize()
                                 )
                             }

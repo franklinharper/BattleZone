@@ -13,7 +13,7 @@ fun main() = application {
         title = "BattleZone",
         state = windowState,
     ) {
-        App()
+        App(onGameEvent = DesktopGameSoundPlayer::handleEvent)
     }
 }
 
